@@ -3,7 +3,7 @@ import subprocess
 from Network import scan_for_networks, scan_for_networks_by_OUI
 ## global variables
 selected_interface = ""
-selected_interface_monitor_mode = False
+is_selected_interface_monitor_mode = False
 TargetAP = ""
 TargetDevice = ""
 exit = 999
@@ -148,7 +148,7 @@ while (exit != "exit"):
             elif (Section[0] == "Interface"):
                 selected_interface_managed_mode()
         case 'N' | 'n':
-            if (selected_interface == "" or selected_interface_monitor_mode==False):
+            if (selected_interface == "" or is_selected_interface_monitor_mode==False):
                 subprocess.run('clear')
                 print("Cannot continue with wireless attacks without selecting a interface and putting it in monitor mode")
             if (Section[0] == "Interface"):
