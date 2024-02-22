@@ -1,6 +1,6 @@
 import subprocess
 
-from Network import scan_for_networks
+from Network import scan_for_networks, scan_for_networks_by_OUI
 ## global variables
 selected_interface = ""
 selected_interface_monitor_mode = False
@@ -124,8 +124,8 @@ while (exit != "exit"):
             break
         case "reset":
             if (Section[0] == "Interface"):
-                TargetAP = ""
-                TargetDevice = ""
+                # TargetAP = ""
+                # TargetDevice = ""
                 print("Target AP and Target Device has ben reset")
                 subprocess.run('clear')
         case '1':
@@ -139,6 +139,8 @@ while (exit != "exit"):
                 print(selected_interface)
             elif (Section[0] == "Interface"):
                 selected_interface_monitor_mode()
+            elif (Section[0] == "Wireless"):
+                TargetAP = scan_for_networks_by_OUI(selected_interface)
         case '3':
             if (Section[0] == "Interface" and selected_interface == ""):
                 print("Cannot continue without selecting a interface")
