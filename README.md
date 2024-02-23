@@ -13,6 +13,8 @@
 - Dos attack on all APs (target all APs with a time interval) `TODO`
 
 ## Future plans (Pre-Exploitation)
+- Handshake Capture (wpa2)
+- Brute-force (wpa2)
 - MITM attacks
 - Rogue AP
 - Port scan
