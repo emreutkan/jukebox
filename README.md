@@ -6,7 +6,7 @@
 - Device Scan (on selected AP) and target selection `TODO`
 - Network Scan by OUI (Organizational Unique Identifier)
 
-- `aireplay attacks`
+`aireplay attacks`
 - Dos attack on target Network
 - Dos attack on target device `TODO`
 - Dos attack on OUI (target all devices with a time interval on a AP) `TODO`
