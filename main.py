@@ -1,6 +1,6 @@
 import subprocess
 
-from Network import scan_for_networks, scan_for_networks_by_OUI,scan_for_networks_by_OUI_Select_Router,Deauth
+from Network import scan_for_networks, scan_for_networks_by_OUI,scan_for_networks_by_OUI_Select_Router,Deauth,Deauth_By_OUI
 ## global variables
 selected_interface = ""
 is_selected_interface_monitor_mode = False
@@ -86,14 +86,15 @@ Interface_Options = [
 Wireless_Options_No_Target = [
     "*** Wireless Attacks ****",
     "1) scan APs and Select a target AP",
-    "2) scan APs (in Same OUI)",
-    "3) scan APs (in Same OUI) and Select a target Router (give first 3 sections of MAC Address as the input at the end)",
-    "D1) Deauth Target AP"
-    "D2) Deauth a Specific Device in Target AP"
+    "2) scan and Group APs by OUI and Select a target OUI (Group by Router)",
+    "D1) Deauth Target AP",
+    "D2) Deauth all Devices in Selected OUI (Deauth all APs in same router with interval) ",
+    "D3) Deauth a Specific Device in Target AP",
     "O1) Deauth all"
-    "Current Interface " + selected_interface,
-    # "Current Target AP " + TargetAP,
-    "Current Target Device " + TargetDevice,
+    f"Current Interface     :   {selected_interface}",
+    f"Current Target AP     :   {TargetAP}",
+    f"Current Target OUI    :   {TargetRouterOUI}" +
+    f"Current Target Device  :   {TargetDevice}",
     "999) return"
 ]
 
@@ -123,6 +124,7 @@ while (exit != "exit"):
     print("type 999 to return to previous section")
 
     match input("jukebox >"):
+
         case "999":
             Section = Previous_Section
         case "exit":
@@ -146,18 +148,22 @@ while (exit != "exit"):
             elif (Section[0] == "Interface"):
                 selected_interface_monitor_mode()
             elif (Section[0] == "Wireless"):
-                scan_for_networks_by_OUI(selected_interface)
+                 TargetRouterOUI = scan_for_networks_by_OUI_Select_Router(selected_interface)
         case '3':
             if (Section[0] == "Interface" and selected_interface == ""):
                 print("Cannot continue without selecting a interface")
                 print(selected_interface)
             elif (Section[0] == "Interface"):
                 selected_interface_managed_mode()
-            elif (Section[0] == "Wireless"):
-                TargetAP = scan_for_networks_by_OUI_Select_Router(selected_interface)
+
         case 'D1':
             if (Section[0] == "Wireless"):
                 Deauth(selected_interface,TargetAP)
+        case 'D3':
+            if (Section[0] == "Wireless" and TargetRouterOUI == ""):
+                print("!NO PREDEFINED OUI DETECTED... Select option 2 and select a target OUI")
+            elif (Section[0] == "Wireless"):
+                Deauth_By_OUI(selected_interface, TargetRouterOUI)
         case 'N' | 'n':
             if (selected_interface == "" or is_selected_interface_monitor_mode==False):
                 subprocess.run('clear')
