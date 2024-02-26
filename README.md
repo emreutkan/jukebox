@@ -1,7 +1,7 @@
 # Jukebox
 ## Features
 - Interface selection, mode changer (monitor, managed)
-- Interface mac spoof `TODO`
+- Interface mac spoof
 - Network Scan and target selection
 - Device Scan (on selected AP) and target selection `TODO`
 - Network Scan by OUI (Organizational Unique Identifier)
