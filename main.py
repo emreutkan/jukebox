@@ -164,7 +164,7 @@ Section = Interface
 Previous_Section = Interface
 
 if __name__ == "__main__":
-    while (exit != "exit"):
+    while exit != "exit":
         for i in art:
             print(i)
         Interface_Options = [
@@ -267,7 +267,7 @@ if __name__ == "__main__":
                     if input('Select a target Y/N').lower() == 'y':
                         TargetDevice = scan_devices_in_AP_Select_Device(selected_interface, TargetAP)
                 elif (Section[0] == "Wireless"):
-                    deauth_selected_device(selected_interface,TargetDevice)
+                    deauth_selected_device(selected_interface,TargetDevice,TargetAP)
 
 ##################################################################################################################################
             case 'D3':
