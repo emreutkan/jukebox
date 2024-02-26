@@ -3,7 +3,7 @@
 - Interface selection, mode changer (monitor, managed)
 - Interface mac spoof
 - Network Scan and target selection
-- Device Scan (on selected AP) and target selection `TODO`
+- Device Scan (on selected AP) and target selection
 - Network Scan by OUI (Organizational Unique Identifier)
 
 `aireplay attacks`

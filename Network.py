@@ -8,7 +8,12 @@ import time
 import csv
 import pandas as pd
 
-from main import clear, ansi_escape_green, ansi_escape_red
+def clear():
+    subprocess.run('clear')
+def ansi_escape_red(string):
+    return f'\033[91m{string}\033[0m'
+def ansi_escape_green(string):
+    return f'\033[92m{string}\033[0m'
 
 # TODO do not depend on global variables
 bssid_of_targetAP = 'not found'
@@ -306,20 +311,33 @@ def scan_devices_in_AP(interface, targetAP):
             return output
 
 
-    #TODO
-    def scan_devices_in_AP_Select_Device(interface, targetAP):
-        # run scan_devices_in_AP(interface,targetAP) to get output of airodump on target AP
-        output = scan_devices_in_AP(interface,targetAP)
-        clear()
-        print(output)
-        return
-    #TODO
-    def deauth_selected_device(interface, target_device_station):
-        return
-    #TODO
-    def deauth_devices_in_targetAP_with_interval(interface, target_device_station):
-        # Selection
-        # 1) Deauth all devices once and quit
-        # 2) Deauth all devices roundrobin
-        return
+def scan_devices_in_AP_Select_Device(interface, targetAP):
+    # run scan_devices_in_AP(interface,targetAP) to get output of airodump on target AP
+
+    output = scan_devices_in_AP(interface,targetAP)
+    clear()
+    print(output,'\n')
+    target_device = input('type the Station of the target device : ')
+    def check_if_selected_device_exist(target_device,output): # recursion once again :)
+        if target_device in output and target_device != '':
+            return target_device
+        else:
+            print(f'{target_device} is not in the devices of this AP. Was it a mistype?')
+            target_device = input('Retype the Station (type 999 to return to previous section: ')
+            if target_device == '999':
+                return ''
+            else:
+                check_if_selected_device_exist(target_device,output)
+    check_if_selected_device_exist(target_device,output)
+    return ''
+
+#TODO
+def deauth_selected_device(interface, target_device_station):
+    return
+#TODO
+def deauth_devices_in_targetAP_with_interval(interface, target_device_station):
+    # Selection
+    # 1) Deauth all devices once and quit
+    # 2) Deauth all devices roundrobin
+    return
 

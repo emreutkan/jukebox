@@ -2,7 +2,7 @@ import subprocess
 import random
 import time
 
-from Network import scan_for_networks,scan_for_networks_by_OUI_Select_Router,Deauth,Deauth_By_OUI
+from Network import scan_for_networks,scan_for_networks_by_OUI_Select_Router,Deauth,Deauth_By_OUI,scan_devices_in_AP_Select_Device,deauth_selected_device
 selected_interface = ""
 TargetAP = ""
 TargetDevice = ""
@@ -172,38 +172,30 @@ if __name__ == "__main__":
             "1) Select interface",
             "2) Put interface in to monitor mode",
             "3) Put interface in to managed mode",
-            "4) Spoof MAC Address"
-            '',
+            "4) Spoof MAC Address \n",
             "N) Network Attacks",
-            "P) Post Connection Attacks",
-            '',
-            f"Current Interface     :   {selected_interface}",
-            "======Interface Options======",
-            '',
-
+            "P) Post Connection Attacks \n",
+            f"Current Interface     :   {ansi_escape_green(selected_interface)}",
+            "======Interface Options======\n",
         ]
 
         Wireless_Options_No_Target = [
             "======Wireless-Attacks======",
             "1) scan APs and Select a target AP",
             "2) scan and Group APs by OUI and Select a target OUI (Group by Router)",
-            '',
+            '3) scan target APs Devices and select a device',
             "D1) Deauth Target AP",
-            "D2) Deauth all Devices in Selected OUI (Deauth all APs in same router with interval) ",
-            "D3) Deauth a Specific Device in Target AP",
-            "O1) Deauth all",
-            '',
-
-            f"Current Interface     :   {selected_interface}",
-            f"Current Target AP     :   {TargetAP}",
-            f"Current Target OUI    :   {TargetRouterOUI}",
-            f"Current Target Device  :   {TargetDevice}",
-            '',
+            "D2) Deauth a specific Device in Target AP",
+            "D3) Deauth all devices in selected OUI (w/ interval or roundrobin) ",
+            "D4) Deauth all Devices in Target AP (w/ interval or roundrobin"
+            f"D5) Deauth all APs (w/ interval or roundrobin) {ansi_escape_red('!!!USE WITH CAUTION')}\n",
+            f"Current Interface     :   {ansi_escape_green(selected_interface)}",
+            f"Current Target AP     :   {ansi_escape_green(TargetAP)}",
+            f"Current Target OUI    :   {ansi_escape_green(TargetRouterOUI)}",
+            f"Current Target Device  :   {ansi_escape_green(TargetDevice)}\n",
             "Reset) Reset all Targets",
             "999) return",
-            "======Wireless-Attacks======",
-            '',
-
+            "======Wireless-Attacks======\n",
         ]
 
         Section[1]()
@@ -211,15 +203,13 @@ if __name__ == "__main__":
         print("type 999 to return to previous section")
 
         match input("jukebox > "):
-
-            case 'print':
-                print(selected_interface)
-                time.sleep(30)
             case "999":
                 Section = Previous_Section
+##################################################################################################################################
             case "exit":
                 exit = "exit"
                 break
+##################################################################################################################################
             case "reset":
                 if (Section[0] == "Wireless"):
                     TargetAP = ""
@@ -227,11 +217,13 @@ if __name__ == "__main__":
                     TargetDevice = ""
                     print("Target AP and Target Device has ben reset")
                     clear()
+##################################################################################################################################
             case '1':
                 if (Section[0] == "Interface"):
                     change_interface()
                 elif (Section[0] == "Wireless"):
                     TargetAP = scan_for_networks(selected_interface)
+##################################################################################################################################
             case '2':
                 if (Section[0] == "Interface" and selected_interface == ""):
                     print("Cannot continue without selecting a interface")
@@ -240,27 +232,53 @@ if __name__ == "__main__":
                     switch_selected_interface_to_monitor_mode()
                 elif (Section[0] == "Wireless"):
                      TargetRouterOUI = scan_for_networks_by_OUI_Select_Router(selected_interface)
+##################################################################################################################################
             case '3':
-                if (Section[0] == "Interface" and selected_interface == ""):
+                if (selected_interface == ""):
                     print("Cannot continue without selecting a interface")
                     print(selected_interface)
                 elif (Section[0] == "Interface"):
                     selected_interface_managed_mode()
-
+                elif Section[0] == 'Wireless' and check_if_selected_interface_in_monitor_mode():
+                    TargetDevice = scan_devices_in_AP_Select_Device(selected_interface,TargetAP)
+##################################################################################################################################
             case '4':
                 if(selected_interface == ""):
                     print("Select an interface first")
                 if(Section[0]=="Interface"):
                     spoof_MAC_of_Interface_with_random_byte(selected_interface)
-
+##################################################################################################################################
             case 'D1':
-                if (Section[0] == "Wireless"):
+                if (Section[0] == "Wireless" and TargetAP == ""):
+                    print('Select a target AP to continue with this attack')
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetAP = scan_for_networks(selected_interface)()
+                elif (Section[0] == "Wireless"):
                     Deauth(selected_interface,TargetAP)
+
+##################################################################################################################################
             case 'D2':
+                if (Section[0] == "Wireless" and TargetAP == ""):
+                    print('To select a target Device first select a target AP to continue with this attack')
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetAP = scan_for_networks(selected_interface)
+                elif (Section[0] == "Wireless" and TargetDevice == ""):
+                    print("Select a Target Device to continue with this attack")
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetDevice = scan_devices_in_AP_Select_Device(selected_interface, TargetAP)
+                elif (Section[0] == "Wireless"):
+                    deauth_selected_device(selected_interface,TargetDevice)
+
+##################################################################################################################################
+            case 'D3':
                 if (Section[0] == "Wireless" and TargetRouterOUI == ""):
-                    print("!NO PREDEFINED OUI DETECTED... Select option 2 and select a target OUI")
+                    print("Select a target OUI to continue with this attack")
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetRouterOUI = scan_for_networks_by_OUI_Select_Router(selected_interface)
                 elif (Section[0] == "Wireless"):
                     Deauth_By_OUI(selected_interface, TargetRouterOUI)
+
+##################################################################################################################################
             case 'N' | 'n':
                 if selected_interface == "":
                     clear()
@@ -269,8 +287,7 @@ if __name__ == "__main__":
                 elif not check_if_selected_interface_in_monitor_mode(selected_interface):
                     clear()
                     print(f"Cannot continue with wireless attacks without switching interface: {selected_interface} to -> monitor mode")
-                    selection = input('Switch to monitor mode Y/N')
-                    if selection == 'y' or selection =='Y':
+                    if input('Switch to monitor mode Y/N').lower() == 'y':
                         switch_selected_interface_to_monitor_mode()
                 elif (Section[0] == "Interface"):
                     Previous_Section = Section
