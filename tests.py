@@ -1,5 +1,5 @@
 import time
-
+from main import spoof_MAC_of_Interface_with_random_byte
 from Network import scan_for_networks, scan_for_networks_by_OUI, process_ssids, Deauth, Deauth_By_OUI
 
 def test1():
@@ -17,4 +17,9 @@ def test4():
 
 def test5():
     Deauth_By_OUI('wlan0','6A:6A:4D')
-test5()
+
+def test6():
+    spoof_MAC_of_Interface_with_random_byte('wlan0')
+
+if __name__ == "__main__":
+    test6()
