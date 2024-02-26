@@ -27,30 +27,129 @@ channel_of_targetAP = 'not found'
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 DeauthTimeout = 0  # if this is 0 then there wont be a timeout, if its any integer other than 0 it will timeout after that integer, timeout is set in some scripts and cleared after that script runs to not cause any issues. timeout is used when multiple APs are targeted
 
-
-# TODO make it fileless like scan_devices_in_AP()
 def scan_for_networks(interface):
-    airodump = subprocess.Popen('airodump-ng {} -w /tmp/networks --output-format csv &'.format(interface), shell=True,
-                                preexec_fn=os.setsid)
+    def recursion():
+        selection = input('Rerun the Scan  Y/N ').lower()
+        while selection != 'y' or selection != 'n':
+            if selection == 'y':
+                scan_for_networks(interface)
+            elif selection == 'n':
+                print(
+                    '==================================================================================================\n')
+                print(
+                    f'this message is from {ansi_escape_green("scan_for_networks")} No {ansi_escape_red("Network AP")} will be returned this may cause issues if this function was called from another function \n')
+                return
+            else:
+                recursion()
+            return
+    print('Airodump is running. Wait a while for it to complete')
+    airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
+                                preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # kill airodump after 10 seconds
     time.sleep(10)
     clear()
-    # subprocess.run(["killall", "airodump-ng"])
-    # airodump.terminate() this does not work because we are running it with shell=True. to kill a process run on shell=True
-    # we need to execute this
-    os.killpg(airodump.pid,
-              signal.SIGTERM)  # but in order for this to work we also have to add preexec_fn=os.setsid to the airodump argument
-    airodump.wait()  # wait until process is killed
-    clear()
-    files = sorted(glob.glob('/tmp/networks-*.csv'))
-    latest_file = files[-1] if files else None
-    if latest_file:
-        with open(latest_file, 'r') as file:
-            print(file.read())
-            target_AP = input('Write the Network name of the target AP ')
-            return target_AP
+    os.killpg(airodump.pid, signal.SIGTERM)
+    # .communicate() waits for the process to be completed. so it won't run until 'os.killpg(airodump.pid, signal.SIGTERM)' is successful.
+    output,error = airodump.communicate()
+    if isinstance(output, bytes):
+        output = output.decode(encoding='latin-1')
+        print(output)
+        print('==================================================================================================\n')
+        # Isolate ESSID column and check row[10] to match AP with the input
+        while 1:
+            targetAP = input(' Select a AP (SSID/ESSID) : ')
+            for row in output.split('\n'):
+                column = row.split()
+                if len(column) >= 12 and (targetAP == column[10]):
+                    return targetAP
+            if targetAP == '999':
+                return
+            else:
+                print(f'Selected AP ({ansi_escape_green(targetAP)}) does not exist. was it a mistype?')
+                print(f'Type {ansi_escape_green("999")} to cancel AP selection')
     else:
-        print(ansi_escape_red('no networks found'))
-        return ''
+        error.decode(encoding='latin-1')
+        print(f'there was a issue running {ansi_escape_red("airodump-ng")}, check interface. if everything is okay rerun')
+        print(f'ERROR {ansi_escape_red(error)}')
+        recursion()
+
+def get_BSSID_and_Station_from_AP(interface, targetAP):
+    def recursion():
+        selection = input('Rerun the Scan  Y/N ').lower()
+        while selection != 'y' or selection != 'n':
+            if selection == 'y':
+                scan_devices_in_AP(interface, targetAP)
+            elif selection == 'n':
+                print(
+                    '==================================================================================================\n')
+                print(
+                    f'this message is from {ansi_escape_green("get_BSSID_and_Station_from_AP")} No {ansi_escape_red("BSSID")} and {ansi_escape_red("CHANNEL")} will be returned this may cause issues if this function was called from another function \n')
+                return  # this return is not enoguh on its own because when recursion is used return will return to the parent of that recursive function
+                # so if we input 'Y' for 10 times we would need to input 'N' 10 times to actually return to the first function call
+            else:
+                recursion()
+            return  # that's why we have a return here so that it returns to the first function call
+
+    # save the output and error from airodump to variables
+    print('Airodump is running. Wait a while for it to complete')
+    airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
+                                preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # kill airodump after 10 seconds
+    time.sleep(5)
+    clear()
+    os.killpg(airodump.pid, signal.SIGTERM)
+    # .communicate() waits for the process to be completed. so it won't run until 'os.killpg(airodump.pid, signal.SIGTERM)' is successful.
+    output, error = airodump.communicate()
+
+    if isinstance(output, bytes):
+        # there was an issue with the output and error, when ---> output = output.decode(encoding='utf-8') it gives ---> UnicodeDecodeError, invalid continuation byte
+        # the solution is changing the encoding from 'utf-8' to 'latin-1'
+        output = output.decode(encoding='latin-1')
+    else:
+        print('there was a issue running Airodump, check interface. if everything is okay rerun')
+        recursion()
+
+    print(output)
+    print('==================================================================================================\n')
+
+    # check if airodump found the target AP or not
+    if targetAP not in output:
+        # IF AN ERROR CAUSED TARGET AP TO BE NOT FOUND IN THE AIRODUMP DATA THEN THIS WILL RUN (example: inteface not found)
+        if isinstance(error, bytes):
+            error = error.decode(encoding='latin-1')
+            if error:
+                print(
+                    f' There was an error with the airodump-ng. If you see networks listed above then there is no serious issue. Otherwise check the interface and the error')
+                print(
+                    f' Generally If you are seeing this then its a issue with the interface either its disconnected or you given a wrong name for the interface \n')
+                # TODO do not allow selecting interfaces that are not on the output of ip link show
+                print(f'ERROR: {ansi_escape_red(error)}')
+
+        # IF NO ERRORS OCCOURED AND NETWORK SCAN WAS SUCCESSFUL BUT TARGET AP WAS NOT ON THE SCANNED NETWORK LIST THEN THIS WILL RUN
+        print('==================================================================================================\n')
+        print(f'{ansi_escape_green(targetAP)} was not found in scanned networks \n')
+        print('But If you are seeing the networks then check connectivity of AP \n')
+        recursion()
+    # if airodump was successful in finding the targetAP
+    else:
+        targetAP_channel = ''
+        targetAP_BSSID = ''
+        # with split.('\n') make the output format in to lines/rows
+        # this for loop will check each line going down
+        for row in output.split('\n'):
+            column = row.split()
+            # the use of row.split() places comma ',' instead of all empty space
+            # the column looks like this for nearly all APs when using airodump
+            # ['BSSID', 'PWR', 'BEACONS', 'DATA', '/s', 'CHANNEL', '360', 'ENCRYPTION', 'CIPHER', 'AUTH', 'ESSID', '\x1b[0K']
+            # but airodump records contain other things as well, so first we need to be sure it matches this pattern
+            if len(column) >= 12 and (targetAP == column[10]) and ((column[0] and column[5]) != ''):
+                targetAP_BSSID = column[0]
+                targetAP_channel = column[5]
+                print(
+                    f' Target BSSID {ansi_escape_green(targetAP_BSSID)} \n CHANNEL {ansi_escape_green(targetAP_channel)}  \n AP {ansi_escape_green(targetAP)} \n \n Listing '
+                    f'Devices in this AP Please Wait')
+                return targetAP_BSSID, targetAP_channel
+    return
 
 
 def process_ssids(file_name):
@@ -235,84 +334,6 @@ def Deauth_By_OUI(interface, targetOUI):
                         stop_flag = True
 
 
-def get_BSSID_and_Station_from_AP(interface, targetAP):
-    def recursion():
-        selection = input('Rerun the Scan  Y/N ').lower()
-        while selection != 'y' or selection != 'n':
-            if selection == 'y':
-                scan_devices_in_AP(interface, targetAP)
-            elif selection == 'n':
-                print(
-                    '==================================================================================================\n')
-                print(
-                    f'this message is from {ansi_escape_green("get_BSSID_and_Station_from_AP")} No {ansi_escape_red("BSSID")} and {ansi_escape_red("CHANNEL")} will be returned this may cause issues if this function was called from another function \n')
-                return  # this return is not enoguh on its own because when recursion is used return will return to the parent of that recursive function
-                # so if we input 'Y' for 10 times we would need to input 'N' 10 times to actually return to the first function call
-            else:
-                recursion()
-            return  # that's why we have a return here so that it returns to the first function call
-
-    # save the output and error from airodump to variables
-    print('Airodump is running. Wait a while for it to complete')
-    airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
-                                preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    # kill airodump after 10 seconds
-    time.sleep(5)
-    clear()
-    os.killpg(airodump.pid, signal.SIGTERM)
-    # .communicate() waits for the process to be completed. so it won't run until 'os.killpg(airodump.pid, signal.SIGTERM)' is successful.
-    output, error = airodump.communicate()
-
-    if isinstance(output, bytes):
-        # there was an issue with the output and error, when ---> output = output.decode(encoding='utf-8') it gives ---> UnicodeDecodeError, invalid continuation byte
-        # the solution is changing the encoding from 'utf-8' to 'latin-1'
-        output = output.decode(encoding='latin-1')
-    else:
-        print('there was a issue running Airodump, check interface. if everything is okay rerun')
-        recursion()
-
-    print(output)
-    print('==================================================================================================\n')
-
-    # check if airodump found the target AP or not
-    if targetAP not in output:
-        # IF AN ERROR CAUSED TARGET AP TO BE NOT FOUND IN THE AIRODUMP DATA THEN THIS WILL RUN (example: inteface not found)
-        if isinstance(error, bytes):
-            error = error.decode(encoding='latin-1')
-            if error:
-                print(
-                    f' There was an error with the airodump-ng. If you see networks listed above then there is no serious issue. Otherwise check the interface and the error')
-                print(
-                    f' Generally If you are seeing this then its a issue with the interface either its disconnected or you given a wrong name for the interface \n')
-                # TODO do not allow selecting interfaces that are not on the output of ip link show
-                print(f'ERROR: {ansi_escape_red(error)}')
-
-        # IF NO ERRORS OCCOURED AND NETWORK SCAN WAS SUCCESSFUL BUT TARGET AP WAS NOT ON THE SCANNED NETWORK LIST THEN THIS WILL RUN
-        print('==================================================================================================\n')
-        print(f'{ansi_escape_green(targetAP)} was not found in scanned networks \n')
-        print('But If you are seeing the networks then check connectivity of AP \n')
-        recursion()
-    # if airodump was successful in finding the targetAP
-    else:
-        targetAP_channel = ''
-        targetAP_BSSID = ''
-        # with split.('\n') make the output format in to lines/rows
-        # this for loop will check each line going down
-        for row in output.split('\n'):
-            column = row.split()
-            # the use of row.split() places comma ',' instead of all empty space
-            # the column looks like this for nearly all APs when using airodump
-            # ['BSSID', 'PWR', 'BEACONS', 'DATA', '/s', 'CHANNEL', '360', 'ENCRYPTION', 'CIPHER', 'AUTH', 'ESSID', '\x1b[0K']
-            # but airodump records contain other things as well, so first we need to be sure it matches this pattern
-            if len(column) >= 12 and (targetAP == column[10]) and ((column[0] and column[5]) != ''):
-                targetAP_BSSID = column[0]
-                targetAP_channel = column[5]
-                print(
-                    f' Target BSSID {ansi_escape_green(targetAP_BSSID)} \n CHANNEL {ansi_escape_green(targetAP_channel)}  \n AP {ansi_escape_green(targetAP)} \n \n Listing '
-                    f'Devices in this AP Please Wait')
-                return targetAP_BSSID, targetAP_channel
-    return
-
 
 # this time I'm making a function without the use of csv output file for output management
 def scan_devices_in_AP(interface, targetAP):
@@ -367,7 +388,6 @@ def scan_devices_in_AP_Select_Device(interface, targetAP):
         check_if_selected_device_exist(target_device, output)
         return ''
 
-# TODO
 def deauth_selected_device(interface, target_device, targetAP):
     try:
         global terminals
