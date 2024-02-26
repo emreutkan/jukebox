@@ -152,53 +152,9 @@ def get_BSSID_and_Station_from_AP(interface, targetAP):
     return
 
 
-def process_ssids(file_name):
-    df = pd.read_csv(file_name, header=None)
-    df.columns = ['bssid', 'ESSID']
-    current_oui = None
-    for index, row in df.iterrows():
-        oui = row['bssid'][:8]
-        if oui != current_oui:
-            if current_oui:
-                print()
-            current_oui = oui
-            print(f'OUI: {oui}')
-        print(f'  - {row["ssid"]} ({row["bssid"]})')
-
-
 # TODO
 def scan_for_networks_by_OUI(interface):
-    random_output_file_name = ''.join(random.choice(string.ascii_letters) for _ in range(32))
-    random_filtered_output_file_name = ''.join(random.choice(string.ascii_letters) for _ in range(32))
-    print('{}.csv'.format(random_filtered_output_file_name))
-
-    # subprocess.run('airodump-ng {} -w /tmp/{}  --output-format csv &'.format(interface, random_output_file_name),shell=True)
-    airodump = subprocess.Popen(
-        'airodump-ng {} -w /tmp/{}  --output-format csv &'.format(interface, random_output_file_name), shell=True,
-        preexec_fn=os.setsid)
-
-    time.sleep(0.1)
-
-    csv_output_location = '/tmp/' + random_output_file_name + '-01.csv'
-    csv_output = pd.read_csv(csv_output_location)
-    csv_outputa = csv_output['BSSID'] + ',' + csv_output[' ESSID']
-    csv_formatted_location = f"/tmp/{random_filtered_output_file_name}.csv"
-    os.mknod(csv_formatted_location)
-    csv_outputa.to_csv(csv_formatted_location, index=False)
-
-    os.killpg(airodump.pid,
-              signal.SIGTERM)  # but in order for this to work we also have to add preexec_fn=os.setsid to the airodump argument
-    time.sleep(0.5)
-    process_ssids(csv_formatted_location)
-    os.remove(f'/tmp/{random_output_file_name}-01.csv')  # '-01' becuase airodump adds a postfix to the csv
-    os.remove(csv_formatted_location)
-    time.sleep(1)
-    # return is used for DEAUTH BY OUI selection in network attacks this file will be looped to find APs in the router
-
-
-# so i couldnt figure out a way to work with my old shell script. instead of using a python method im calling
-# a file from ShellScripts and im sending variables from python to shell then im starting script that relies on those variables
-
+    return
 def scan_for_networks_by_OUI(interface):
     subprocess.run(['./ShellScripts/OUIFormatter.sh' + ' ' + f'{interface}'], shell=True)
 
