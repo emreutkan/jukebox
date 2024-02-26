@@ -12,7 +12,7 @@
 - Dos attack on OUI (target all devices with a time interval on a AP)
 - Dos attack on all APs (target all APs with a time interval) `TODO`
 
-## Future plans (Pre-Exploitation)
+## Future plans
 - Handshake Capture (wpa2)
 - Brute-force (wpa2)
 - MITM attacks
