@@ -283,24 +283,23 @@ def get_airodump_output_OUI_formatted(interface):
     else:
         return oui_output
 
-# TODO
-
-def scan_for_networks_by_OUI(interface):
-    try:
-        print('')
-        # targetAP_BSSID, targetAP_channel = get_BSSID_and_Station_from_AP(interface, targetAP)
-    except TypeError:
-        print('==================================================================================================\n')
-        print(f'This message is from {ansi_escape_green("scan_for_networks_by_OUI")}')
-        print(f'There is a problem with {ansi_escape_red("get_BSSID_and_Station_from_AP")}')
-        input(f'input anything to return to previous function \n')
-    return
-
-def scan_for_networks_by_OUI(interface):
-    subprocess.run(['./ShellScripts/OUIFormatter.sh' + ' ' + f'{interface}'], shell=True)
 def scan_for_networks_by_OUI_Select_Router(interface):
-    subprocess.run(['./ShellScripts/OUIFormatter.sh' + ' ' + f'{interface}'], shell=True)
-    return input('Write the OUI of target Router: ')
+    oui_output = get_airodump_output_OUI_formatted(interface) # as usual get the output first
+    print('==================================================================================================\n')
+    while 1:
+        target_oui = input("Select an OUI from the output").replace(" ", "") # so that if user types 'XX:XX:XX   ' instead of 'XX:XX;XX' it still gets registered
+        if target_oui in oui_output and len(target_oui) == 8: # the OUI lenght is 8 (XX:XX:XX) so if its in output and lenght is 8 then any mistrypes like emtpy space or anything that exist in output but not a mac address wil not be registered
+            # however if a wifi has a SSID like 12345678 and user types 12345678 it will be a FALSE POSITIVE so nothing to do about that.
+            # I may add a format to check too but its not necessary since if a user picks a wrong OUI it wont be usefull in deauth_by_OUI attack and user would have to choose the target OUI again.
+            return target_oui
+        elif target_oui == '999':
+            return
+        else:
+            print(len(target_oui))
+            print(f'Selected OUI ({ansi_escape_green(target_oui)}) does not exist. was it a mistype?')
+            print(f'Type {ansi_escape_green("999")} to cancel OUI selection')
+
+# TODO
 
 def Deauth_By_OUI(interface, targetOUI):
     global DeauthTimeout  # I selected Deauth to be done in 1minute intervals in this script
