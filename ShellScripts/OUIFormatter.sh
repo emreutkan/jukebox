@@ -2,10 +2,10 @@
 
 interface=$1
 airodump() {
-    airodump-ng "$interface" -w output --output-format csv &
+    airodump-ng "$interface" -w temp_output --output-format csv &
     AIRDUMP_PID=$!
     sleep 10
-    awk -F, '/^[[:space:]]*([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/{print $1 "," $14}' output-01.csv | sort -t, -k1,1 > sorted_ssids.csv
+    awk -F, '/^[[:space:]]*([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/{print $1 "," $14}' temp_output-01.csv | sort -t, -k1,1 > sorted_ssids.csv
     kill $AIRDUMP_PID
 }
 
@@ -23,4 +23,4 @@ get_Data() {
 
 airodump
 get_Data
-rm -f output-*.csv sorted_ssids.csv
+rm -f temp_output-*.csv sorted_ssids.csv

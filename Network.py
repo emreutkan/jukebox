@@ -1,12 +1,9 @@
 import glob
 import os
-import random
 import signal
-import string
 import subprocess
 import time
 import csv
-import pandas as pd
 
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 
@@ -48,7 +45,7 @@ def get_BSSID_and_Station_from_AP(interface, targetAP):
         selection = input('Rerun the Scan  Y/N ').lower()
         while selection != 'y' or selection != 'n':
             if selection == 'y':
-                scan_devices_in_AP(interface, targetAP)
+                get_devices_in_AP_output(interface, targetAP)
             elif selection == 'n':
                 print(
                     '==================================================================================================\n')
@@ -140,7 +137,7 @@ def Deauth(interface, targetAP):
         print(f'There is a problem with {ansi_escape_red("get_BSSID_and_Station_from_AP")}')
         input(f'input anything to return to previous function \n')
 
-def scan_devices_in_AP(interface, targetAP):
+def get_devices_in_AP_output(interface, targetAP):
     try:
         targetAP_BSSID, targetAP_channel = get_BSSID_and_Station_from_AP(interface, targetAP)
         airodump = subprocess.Popen(f'airodump-ng -c {targetAP_channel} --bssid {targetAP_BSSID} {interface}',
@@ -153,7 +150,7 @@ def scan_devices_in_AP(interface, targetAP):
             clear()
             output = output.decode(encoding='latin-1')
             print(output + '\n')
-        return output
+            return output
     except TypeError:  # CANT CHECK /if (targetAP_BSSID and targetAP_channel) == None/ PYTHON DOES NOT ALLOW MULTIPLE VARIABLE ASSIGNENTS WITH NONE
         # basically a,b = None is not something that can be done thats why im using try expect. if else throws error
         print('==================================================================================================\n')
@@ -164,7 +161,7 @@ def scan_devices_in_AP(interface, targetAP):
 def scan_devices_in_AP_Select_Device(interface, targetAP):
     # run scan_devices_in_AP(interface,targetAP) to get output of airodump on target AP
 
-    output = scan_devices_in_AP(interface, targetAP)
+    output = get_devices_in_AP_output(interface, targetAP)
     if not output:  # in this scenario I expect output to be None and None == false so...
         # also I don't have to use try except TypeError: like I did in scan_devices_in_AP because that error only comes from multiple assignment
         print('==================================================================================================\n')
@@ -237,7 +234,8 @@ def get_airodump_output(interface):
     if isinstance(output, bytes):
         output = output.decode(encoding='latin-1')
         if ('Failed initializing wireless card(s)'.lower() in output.lower()):
-            return f'INTERFACE ERROR {ansi_escape_red(output)}'
+            print(f'INTERFACE ERROR {ansi_escape_red(output)}')
+            recursion()
         else:
             return output
     else:
@@ -246,34 +244,47 @@ def get_airodump_output(interface):
         print(f'ERROR {ansi_escape_red(error)}')
         recursion()
 
+def get_airodump_output_OUI_formatted(interface):
+    def recursion():
+        selection = input('Rerun the Scan  Y/N ').lower()
+        while selection != 'y' or selection != 'n':
+            if selection == 'y':
+                get_airodump_output_OUI_formatted(interface)
+            elif selection == 'n':
+                print(
+                    '==================================================================================================\n')
+                print(
+                    f'this message is from {ansi_escape_green("get_airodump_output_OUI_formatted")} No {ansi_escape_red("OUI_output")} will be returned this may cause issues if this function was called from another function \n')
+                return
+            else:
+                recursion()
+            return
+    print("OUIFormatter.sh is running. wait until it completes the scan (20s) ")
+    # so it turns out I can just do capture_output=True,text=True and get an output without bytes and stuff
+    shell = subprocess.run(f'./ShellScripts/OUIFormatter.sh {interface}',shell=True,capture_output=True,text=True)
+    oui_output,oui_output_error = shell.stdout, shell.stderr
+    clear()
+    if ('Failed initializing wireless card(s)'.lower() in oui_output.lower()):
+        print(f'INTERFACE ERROR {ansi_escape_red(oui_output)}')
+        recursion()
+    if oui_output_error:
+        print(
+            f'there was a issue running {ansi_escape_red("OUIFormatter.sh")}, check interface. if everything is okay rerun')
+        print(f'ERROR {ansi_escape_red(oui_output_error)}')
+
+        print(oui_output)
+        print('an error occoured but If you see networks above then there is no problem (check above before the networks to see the error)')
+        selection = input('Rerun the Scan  Y/N ').lower()
+        while selection != 'y' or selection != 'n':
+            if selection == 'y':
+                get_airodump_output_OUI_formatted(interface)
+            elif selection == 'n':
+                return oui_output
+    else:
+        return oui_output
+
 # TODO
 
-def get_airodump_output_OUI_formatted(interface):
-    output = get_airodump_output(interface)
-    if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
-        oui_output = 'asd'
-        oui = ''
-        output = output.split('\n')
-        for row in output:
-            column = row.split()
-            if len(column) >= 12 and (oui in output) and (column[0] != ''):
-                oui_output = oui_output + '\n{mac} : {SSID}'
-                column[0] = ''
-            if len(column) >= 12 and (column[0] != ''):
-                oui_output = oui_output + '\n'
-                mac = column[0]
-                oui = mac[:8]
-                SSID = column[10]
-                oui_output = oui_output + f'OUI: {oui} \n{mac} : {SSID}'
-                column[0] = '';
-                column[10] = '';
-        print(oui_output)
-    else:
-        print('==================================================================================================\n')
-        print(f'This message is from {ansi_escape_green("scan_for_networks")}')
-        print(f'There is a problem with {ansi_escape_red("get_airodump_output")}')
-        print(ansi_escape_red(output))
-        input(f'input anything to return to previous function \n')
 def scan_for_networks_by_OUI(interface):
     try:
         print('')
@@ -342,6 +353,14 @@ def Deauth_By_OUI(interface, targetOUI):
 
 # TODO
 def deauth_devices_in_targetAP_with_interval(interface, targetAP):
+    output = get_devices_in_AP_output(interface,targetAP)
+    if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
+        print(output)
+    else:
+        print('==================================================================================================\n')
+        print(f'This message is from {ansi_escape_green("deauth_devices_in_targetAP_with_interval")}')
+        print(f'There is a problem with {ansi_escape_red("get_devices_in_AP_output")}')
+        input(f'input anything to return to previous function \n')
     # Selection
     # 1) Deauth all devices once and quit
     # 2) Deauth all devices roundrobin
