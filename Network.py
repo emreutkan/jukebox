@@ -3,20 +3,53 @@ import os
 import signal
 import subprocess
 import time
-import csv
-
+import re
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 
 def clear():
+    """
+    runs clear command in shell
+
+    clear command is used to clear the terminal screen
+    """
     subprocess.run('clear')
 
 def ansi_escape_red(string):
+    """
+    inputs a string and returns it with the color red
+
+    use when in need for errors during print commands
+
+    param string
+    """
     return f'\033[91m{string}\033[0m'
 
 def ansi_escape_green(string):
+    """
+    inputs a string and returns it with the color green
+
+    use when in need for better visibility during print commands
+
+    param string
+    """
     return f'\033[92m{string}\033[0m'
 
 def scan_for_networks(interface):
+    """
+    inputs a string and returns it with the color green
+
+    use when in need for better visibility during print commands
+
+    :param interface: user selected interface from the main.py
+
+    CALLS: 0
+
+    CALLED BY: main.py
+
+    Depends on (uses) :
+        - get_airodump_output(interface)
+
+    """
     output = get_airodump_output(interface)
     if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
         print(output)
@@ -39,13 +72,28 @@ def scan_for_networks(interface):
         print(ansi_escape_red(output))
         input(f'input anything to return to previous function \n')
 
-
 def get_BSSID_and_Station_from_AP(interface, targetAP):
+    """
+    Runs airodump and saves the output to a variable called output.
+
+    :param interface: is selected by user in main.py and used in airodump
+
+    :param targetAP: is used through the output of airodump to match the BSSID and STATION
+    :type targetAP: String
+
+    :return:  BSSID and STATION
+    :rtype: String
+
+    CALLS: itself,
+
+    CALLED BY: itself,
+
+    """
     def recursion():
         selection = input('Rerun the Scan  Y/N ').lower()
         while selection != 'y' or selection != 'n':
             if selection == 'y':
-                get_devices_in_AP_output(interface, targetAP)
+                get_BSSID_and_Station_from_AP(interface, targetAP)
             elif selection == 'n':
                 print(
                     '==================================================================================================\n')
@@ -99,8 +147,7 @@ def get_BSSID_and_Station_from_AP(interface, targetAP):
         recursion()
     # if airodump was successful in finding the targetAP
     else:
-        targetAP_channel = ''
-        targetAP_BSSID = ''
+
         # with split.('\n') make the output format in to lines/rows
         # this for loop will check each line going down
         for row in output.split('\n'):
@@ -119,6 +166,18 @@ def get_BSSID_and_Station_from_AP(interface, targetAP):
     return
 
 def Deauth(interface, targetAP):
+
+    """
+    CALLS:
+        : get_BSSID_and_Station_from_AP :
+
+
+    CALLED BY: main.py
+
+    :param interface:
+    :param targetAP:
+    :return:
+    """
     try:
         targetAP_BSSID, targetAP_channel = get_BSSID_and_Station_from_AP(interface, targetAP)
         # switch to target channel
@@ -138,6 +197,17 @@ def Deauth(interface, targetAP):
         input(f'input anything to return to previous function \n')
 
 def get_devices_in_AP_output(interface, targetAP):
+    """
+
+    runs airodump with :param interface: on a specific SSID (:param targetAP:) to get all devices connected to that SSID
+
+    CALLS: 0
+
+    CALLED BY:
+        :scan_devices_in_AP_Select_Device:
+        :deauth_devices_in_targetAP:
+    :return: OUTPUT of airodump
+    """
     try:
         targetAP_BSSID, targetAP_channel = get_BSSID_and_Station_from_AP(interface, targetAP)
         airodump = subprocess.Popen(f'airodump-ng -c {targetAP_channel} --bssid {targetAP_BSSID} {interface}',
@@ -159,6 +229,13 @@ def get_devices_in_AP_output(interface, targetAP):
         input(f'input anything to return to previous function \n')
 
 def scan_devices_in_AP_Select_Device(interface, targetAP):
+
+    """
+
+    :param interface:
+    :param targetAP:
+    :return:
+    """
     # run scan_devices_in_AP(interface,targetAP) to get output of airodump on target AP
 
     output = get_devices_in_AP_output(interface, targetAP)
@@ -214,7 +291,7 @@ def get_airodump_output(interface):
         selection = input('Rerun the Scan  Y/N ').lower()
         while selection != 'y' or selection != 'n':
             if selection == 'y':
-                scan_for_networks(interface)
+                get_airodump_output(interface)
             elif selection == 'n':
                 print(
                     '==================================================================================================\n')
@@ -244,7 +321,13 @@ def get_airodump_output(interface):
         print(f'ERROR {ansi_escape_red(error)}')
         recursion()
 
+
 def get_airodump_output_OUI_formatted(interface):
+    """
+    th
+
+    param interface
+    """
     def recursion():
         selection = input('Rerun the Scan  Y/N ').lower()
         while selection != 'y' or selection != 'n':
@@ -274,7 +357,8 @@ def get_airodump_output_OUI_formatted(interface):
 
         print(oui_output)
         print('an error occoured but If you see networks above then there is no problem (check above before the networks to see the error)')
-        selection = input('Rerun the Scan  Y/N ').lower()
+        # selection = input('Rerun the Scan  Y/N ').lower()
+        selection = 'n'
         while selection != 'y' or selection != 'n':
             if selection == 'y':
                 get_airodump_output_OUI_formatted(interface)
@@ -300,58 +384,40 @@ def scan_for_networks_by_OUI_Select_Router(interface):
             print(f'Type {ansi_escape_green("999")} to cancel OUI selection')
 
 # TODO
-
+def remove_ansi_escape_codes(input_text):
+    ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+    return ansi_escape.sub('', input_text)
+def get_SSID_from_OUI(output, targetOUI):
+    ssids = []
+    lines = output.split('\n')
+    current_oui = None  # Initialize current_oui outside the loop
+    for line in lines: # f the selected oui is in the last element of the output list it will add ?25 to the list no idea why
+        if line.startswith("OUI:"):
+            current_oui = line.split()[1]
+        elif current_oui == targetOUI and "{" in line:
+            ssid_start_index = line.find("{") + 1
+            ssid_end_index = line.find("}", ssid_start_index)  # Find ']' starting from ssid_start_index
+            ssid = line[ssid_start_index:ssid_end_index].strip()
+            if ssid:  # Check if ssid is not an empty string
+                ssids.append(ssid)
+    return [ssid for ssid in ssids if ssid]  # Exclude any empty elements
 def Deauth_By_OUI(interface, targetOUI):
-    global DeauthTimeout  # I selected Deauth to be done in 1minute intervals in this script
-    DeauthTimeout = '10'  # its enclosed with '' since we cant send integer with subprocress.run but it gets this variable as an integer IDK WHY but it works
-    files = sorted(glob.glob('/tmp/networks-*.csv'))
-    latest_file = files[
-        -1] if files else '/tmp/networks-01.csv'  ## this else is differnet from the one i used in scan networks because the shell script below will create the /tmp/networks-01.csv in its aireodump function. and if I were to leave it as None like before the script wont run because I pass it as a parameter
-    subprocess.run(['./ShellScripts/OUIFormatterKEEPFILE.sh' + ' ' + f'{interface}' + ' ' + f'{latest_file}'],
-                   shell=True)  # get csv file
-    clear()
-    APs_in_OUI = []  # decalre a list to store all APs in OUI
-    with open('sorted_ssids.csv', 'r') as f:  # get the row count of entries in csv file
-        csv_reader = csv.reader(f)
-        for row in csv_reader:  #
-            if row[0].startswith(targetOUI) and row[1] != '':  # row[0] means first entrie
-                APs_in_OUI.append(row[1])
+    oui_output = get_airodump_output_OUI_formatted(interface)
+    oui_output = remove_ansi_escape_codes(oui_output)
+    print(    get_SSID_from_OUI(oui_output, targetOUI))
 
-    APs_in_OUI_Count = len(APs_in_OUI)
-    if APs_in_OUI_Count == 0:
-        print('This OUI does not belong to any AP please reselect the OUI by typing 3 in Network attacks')
-    else:
-        selection = 0
-        while selection != '1' and selection != '2' and selection != 'exit':
-            print(APs_in_OUI_Count, ' APs found in: ', targetOUI)
-            print('type 1 to Deauth ALL APs and quit')
-            print('type 2 to Deauth ALL APs INDEFINETELY')
-            print('type "exit" to quit')
-            selection = input('Selection')
-        if selection == "exit":
-            return
-        if selection == '1':
-            for i in APs_in_OUI:
-                Deauth(interface,
-                       i.strip())  # strip is needed otherwise it wont be able to read csv file since variable may have extra space on front of the AP name
-        elif selection == '2':
-            stop_flag = False  # this is set to lisen for 'q' command from keybaord to stop the loop
-            while not stop_flag:
-                for i in APs_in_OUI:
-                    try:
-                        print('Deauthentication Attack has  an INFINITE LOOP.')
-                        print('to stop the attack press "ctrl+c" in this terminal. time left 3 seconds')
-                        time.sleep(1)
-                        print('to stop the attack press "ctrl+c" in this terminal. time left 2 seconds')
-                        time.sleep(1)
-                        print('to stop the attack press "ctrl+c" in this terminal. time left 1 seconds')
-                        time.sleep(1)
-                        Deauth(interface, i.strip())
-                    except KeyboardInterrupt:
-                        stop_flag = True
+        # print('==================================================================================================\n')
+        # print(f'This message is from {ansi_escape_green("deauth_devices_in_targetAP_with_interval")}')
+        # print(f'There is a problem with {ansi_escape_red("get_devices_in_AP_output")}')
+        # input(f'input anything to return to previous function \n')
+    # Selection
+    # 1) Deauth all devices once and quit
+    # 2) Deauth all devices roundrobin
+    return
+
 
 # TODO
-def deauth_devices_in_targetAP_with_interval(interface, targetAP):
+def deauth_devices_in_targetAP(interface, targetAP):
     output = get_devices_in_AP_output(interface,targetAP)
     if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
         print(output)

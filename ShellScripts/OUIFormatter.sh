@@ -17,7 +17,7 @@ get_Data() {
         current_oui = oui;
         print "\nOUI: " oui;
         }
-        print "  - " $2 " (" $1 ")";
+        print "  - {" $2 " } (" $1 ")";
     }' sorted_ssids.csv
 }
 
