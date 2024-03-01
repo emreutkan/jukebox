@@ -3,4 +3,4 @@ import Network
 import main
 
 if __name__ == "__main__":
-    Network.capture_handshake('wlan0','SUPERONLINE')
+    Network.bruteforce_cap_file('wlan0','SUPERONLINE')
