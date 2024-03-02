@@ -211,8 +211,11 @@ if __name__ == "__main__":
             "D4) Deauth all Devices in Target AP (w/ interval or roundrobin"
             f"D5) Deauth all APs (w/ interval or roundrobin) {ansi_escape_red('!!!USE WITH CAUTION')}\n",
 
-            f"C1) Capture Handshake of Target AP",
+            f"C0) Capture Packets on Target AP (Captures are stored in /tmp/TargetAP-CaptureNoHandshake/) "
+            f"C1) Capture Handshake of Target AP (Captures are stored in /tmp/TargetAP-handshakeCapture/)  ",
             f"C2) Bruteforce attack on Target AP with Capture File",
+            f"C3) Graph the Network using Capture File",
+
     
             f"Current Interface     :   {ansi_escape_green(selected_interface)}",
             f"Current Target AP     :   {ansi_escape_green(TargetAP)}",
@@ -303,23 +306,29 @@ if __name__ == "__main__":
                     Deauth_By_OUI(selected_interface, TargetRouterOUI)
 
             ##############################################################################################
-
             case 'C1':
-                if Section[0] == "Wireless" and TargetAP == "":
-                    print('Select a target AP and capture its handshake to continue with this attack')
-                    if input('Select a target Y/N').lower() == 'y':
-                        TargetAP = scan_for_networks(selected_interface)
-                elif Section[0] == "Wireless":
-                    Network.bruteforce_cap_file(selected_interface, TargetAP)
-            ##############################################################################################
-
-            case 'C2':
                 if Section[0] == "Wireless" and TargetAP == "":
                     print('Select a target AP to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
                         TargetAP = scan_for_networks(selected_interface)
                 elif Section[0] == "Wireless":
                     Network.capture_handshake(selected_interface, TargetAP)
+            ##############################################################################################
+            case 'C2':
+                if Section[0] == "Wireless" and TargetAP == "":
+                    print('Select a target AP and capture its handshake to continue with this attack')
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetAP = scan_for_networks(selected_interface)
+                elif Section[0] == "Wireless":
+                    Network.bruteforce_handshake_capture(selected_interface, TargetAP)
+            ##############################################################################################
+            case 'C3':
+                if Section[0] == "Wireless" and TargetAP == "":
+                    print('Select a target AP and to continue with this attack')
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetAP = scan_for_networks(selected_interface)
+                elif Section[0] == "Wireless":
+                    Network.graph_networks()
             ##############################################################################################
             case 'N' | 'n':
                 if selected_interface == "":
