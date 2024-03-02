@@ -798,8 +798,13 @@ def capture_handshake(interface, target_ap):
         input(f'input anything to return to previous function \n')
         return
 
+    if output and f'{target_ap}'.lower() not in output.lower() and 'Failed initializing wireless card(s)'.lower() not in output.lower():
+        print(ansi_escape_red(f'Airodump did not find the f{target_ap} in its scan'))
+        print(f'Check if {ansi_escape_green(target_ap)} is active')
+        input('input anything to return to network attacks : ')
+        return
 
-    if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
+    elif output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
         authentications = get_SSIDs_with_PSK_authentication_from_output(output)
         if target_ap in authentications:
             BSSID, CHANNEL = get_BSSID_and_Station_from_AP(interface, target_ap)
@@ -885,7 +890,7 @@ def capture_handshake(interface, target_ap):
 
     else:
         print('==================================================================================================\n')
-        print(f'This message is from {ansi_escape_green("deauth_devices_in_targetAP_with_interval")}')
+        print(f'This message is from {ansi_escape_green("capture_handshake")}')
         print(f'There is a problem with {ansi_escape_red("get_devices_in_AP_output")}')
         input(f'input anything to return to previous function \n')
         return
@@ -972,6 +977,7 @@ def bruteforce_handshake_capture(interface,target_ap):
         for terminal in terminals:
             aircrack = subprocess.Popen(f'{terminal} -e {aircrack_scipt}',shell=True, preexec_fn=os.setsid,)
             aircrack.wait()  # wait until user closes the aireplay terminal
+            input('Process Complete. check the aircrack terminal to see if it found a match')
             return
 
 def graph_networks():
