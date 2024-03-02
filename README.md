@@ -34,3 +34,7 @@ An aircrack-ng utility
 - MITM attacks
 - Rogue Network
 - Port scan
+
+## not planned
+
+- Anything on WPA/WEP `(airdecap-ng / besside-ng)`
