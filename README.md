@@ -1,5 +1,7 @@
 # Jukebox
+
 An aircrack-ng utility
+
 ## Features
 - Interface selection, mode changer (monitor, managed)
 - Interface mac spoof
@@ -14,8 +16,15 @@ An aircrack-ng utility
 - Dos attack on OUI (interval/indefinite)
 
 
+- Packet Capture
 - Handshake Capture (WPA2/PSK)
 - Brute Force attack on capture file (WPA2/PSK)
+- Network graph (airgraph-ng)
+
+### requirements
+
+- aircrack-ng
+- airgraph-ng (optional)
 
 ## Future plans
 - Dos attack on all Networks (interval/indefinite) 

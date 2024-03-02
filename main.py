@@ -185,22 +185,23 @@ Previous_Section = Interface
 
 if __name__ == "__main__":
     while exit != "exit":
+        clear()
         for i in art:
             print(i)
         Interface_Options = [
-            "======Interface Options======",
+            "======Interface Options======\n",
             "1) Select interface",
             "2) Put interface in to monitor mode",
             "3) Put interface in to managed mode",
             "4) Spoof MAC Address \n",
             "N) Network Attacks",
             "P) Post Connection Attacks \n",
-            f"Current Interface     :   {ansi_escape_green(selected_interface)}",
+            f"Current Interface     :   {ansi_escape_green(selected_interface)}\n",
             "======Interface Options======\n",
         ]
 
         Wireless_Options_No_Target = [
-            "======Wireless-Attacks======",
+            "======Wireless-Attacks======\n",
             "1) scan APs and Select a target AP",
             "2) scan and Group APs by OUI and Select a target OUI (Group by Router)",
             '3) scan target APs Devices and select a device',
@@ -211,10 +212,10 @@ if __name__ == "__main__":
             "D4) Deauth all Devices in Target AP (w/ interval or roundrobin"
             f"D5) Deauth all APs (w/ interval or roundrobin) {ansi_escape_red('!!!USE WITH CAUTION')}\n",
 
-            f"C0) Capture Packets on Target AP (Captures are stored in /tmp/TargetAP-CaptureNoHandshake/) "
+            f"C0) Capture Packets on Target AP (Captures are stored in /tmp/TargetAP-Captures/) ",
             f"C1) Capture Handshake of Target AP (Captures are stored in /tmp/TargetAP-handshakeCapture/)  ",
             f"C2) Bruteforce attack on Target AP with Capture File",
-            f"C3) Graph the Network using Capture File",
+            f"C3) Graph the Network using Capture File {ansi_escape_red('Requires airgraph-ng')}",
 
     
             f"Current Interface     :   {ansi_escape_green(selected_interface)}",
@@ -222,13 +223,13 @@ if __name__ == "__main__":
             f"Current Target OUI    :   {ansi_escape_green(TargetRouterOUI)}",
             f"Current Target Device  :   {ansi_escape_green(TargetDevice)}\n",
             "Reset) Reset all Targets",
-            "999) return",
+            "999) return\n",
             "======Wireless-Attacks======\n",
         ]
 
         Section[1]()
-        print("type exit to close the program")
-        print("type 999 to return to previous section")
+        print("type exit to close the program",
+              "type 999 to return to previous section\n")
 
         match input("jukebox > "):
             case "999":
@@ -306,6 +307,14 @@ if __name__ == "__main__":
                     Deauth_By_OUI(selected_interface, TargetRouterOUI)
 
             ##############################################################################################
+            case 'C0':
+                if Section[0] == "Wireless" and TargetAP == "":
+                    print('Select a target AP to continue with this attack')
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetAP = scan_for_networks(selected_interface)
+                elif Section[0] == "Wireless":
+                    Network.capture_packets(selected_interface, TargetAP)
+            ##############################################################################################
             case 'C1':
                 if Section[0] == "Wireless" and TargetAP == "":
                     print('Select a target AP to continue with this attack')
@@ -328,7 +337,7 @@ if __name__ == "__main__":
                     if input('Select a target Y/N').lower() == 'y':
                         TargetAP = scan_for_networks(selected_interface)
                 elif Section[0] == "Wireless":
-                    Network.graph_networks()
+                    Network.graph_networks(TargetAP)
             ##############################################################################################
             case 'N' | 'n':
                 if selected_interface == "":
@@ -344,4 +353,3 @@ if __name__ == "__main__":
                 elif Section[0] == "Interface":
                     Previous_Section = Section
                     Section = Wireless
-        clear()
