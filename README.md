@@ -22,7 +22,9 @@ An aircrack-ng utility
 - Network graph `(airgraph-ng)`
 
 
-- Dos + handshake Capture on all Networks (`besside-ng`) 
+- handshake Capture on all Networks (`besside-ng`) 
+- handshake Capture on target Network (`besside-ng`) 
+
 
 ### requirements
 
@@ -31,6 +33,14 @@ An aircrack-ng utility
 
 ## Future plans
 - Dos attack on all Networks (interval/indefinite) 
+- Encrypted Wi-Fi packet injection `(airventriloquist-ng)`
+- Crack Wep key of an open network `(wesside-ng)`
+- wpaclean, airolib-ng, airdeclock-ng
+- airbase-ng
+
+
+
+## Future plans for other projects
 - MITM attacks
 - Rogue Network
 - Port scan

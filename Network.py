@@ -977,15 +977,17 @@ def bruteforce_handshake_capture(interface, target_ap):
         print(
             f'Running aircrack on {ansi_escape_green(target_ap)} using wordlist in {ansi_escape_green(selected_password_list)} ')
         # aircrack
-        aircrack_scipt = f'aircrack-ng -w {selected_password_list} -b {BSSID} {capture_file_address}'
+        target_directory = f'/tmp/{target_ap}-password'
+        os.makedirs(target_directory, exist_ok=True)  # it won create if it exist
+        aircrack_scipt = f'aircrack-ng -w {selected_password_list} -b {BSSID} -l {target_directory}/{target_ap}.txt {capture_file_address}'
         for terminal in terminals:
-            aircrack = subprocess.Popen(f'{terminal} -e {aircrack_scipt}', shell=True, preexec_fn=os.setsid, )
-            aircrack.wait()  # wait until user closes the aireplay terminal
-            print('Process Complete. check the aircrack terminal to see if it found a match')
-            print('if no matches found then aircrack terminal will close automatically')
+            aircrack = subprocess.Popen(f'{terminal} -e {aircrack_scipt}', shell=True, preexec_fn=os.setsid,)
+            # aircrack.wait()  # wait until user closes the aireplay terminal
+            print(f'aircrack-ng -w {selected_password_list} -b {BSSID} {capture_file_address}')
+            print('\n')
+            print(f'Process Complete. To check if password is found look at {ansi_escape_green(f"{target_directory}/{target_ap}.txt")}')
             input('press enter to return to network attacks')
             return
-
 
 def capture_packets(interface, target_ap):
     output = get_airodump_output(interface)
@@ -1066,7 +1068,7 @@ def graph_networks(target_ap):
     print(f"Using {ansi_escape_green('airgraph-ng')}  with {ansi_escape_green(capture_file_address)}")
 
     while 1:
-        selection = input('CAPR / CPG').lower()
+        selection = input('CAPR / CPG : ').lower()
         if selection == 'capr':
             graph_output_location = f'/tmp/{target_ap}-CAPR';
             airgraph_command = f'airgraph-ng -i {capture_file_address} -o {graph_output_location} -g CAPR'
