@@ -1153,6 +1153,52 @@ def besside_target_ap(interface, target_ap):
         print("BSSID not found")
 
 
+def airdecap_wpa(target_ap):
+    while 1:
+        print(f'Here is the list of all cap files that start with {ansi_escape_green(target_ap)} in /tmp\n')
+        find_files_with_locate = subprocess.run(
+            f"find /tmp -type f -name '{target_ap}-*.cap' ",
+            shell=True,
+            capture_output=True,
+            text=True  # This automatically decodes output to string
+        )
+        print(find_files_with_locate.stdout)
+        capture_location = input(f'Type the address of (WPA/WPA2) packet capture of {ansi_escape_green(target_ap)} you want to decrypt : ').strip()
+        password_of_ap = input(f'Type the password of {ansi_escape_green(target_ap)} you want to decrypt : ')
+        clear()
+        print(f'Capture file = {ansi_escape_green(capture_location)}', f'Password of {ansi_escape_green(target_ap)} = {ansi_escape_green(password_of_ap)}')
+        print(f' Type {ansi_escape_green("E")} to return to network attacks')
+        selection = input('Is everything correct Y/N/E : ').lower()
+        if selection == 'y':
+            break
+        if selection == 'e':
+            return
+    clear()
+    print(f'Running decryption on {ansi_escape_green(capture_location)} with airdecap \n')
+    airdecap_script = f'airdecap-ng -e {target_ap} -p {password_of_ap} {capture_location}'
+    airdecap = subprocess.Popen(airdecap_script,shell=True,preexec_fn=os.setsid,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    airdecap.wait()
+    stdout, stderr = airdecap.communicate()
+    if 'Could not open' in stdout:
+        print(f'{ansi_escape_red("STDOUT")}  = {stdout}')
+        print(f'{ansi_escape_red("STDERR")}  = {stderr}')
+        print(f'Decryption failed, possibly due to {ansi_escape_red("mistype in capture file location")}')
+        input('Press enter to return ')
+        return
+    if 'Number of decrypted WPA  packets         0' in stdout: # yes this has to have that much space between the strings and yes its because this is the exact match on stdout when nothing is decrypted
+        print(f'{ansi_escape_red("STDOUT")}  = {stdout}')
+        print(f'{ansi_escape_red("STDERR")}  = {stderr}')
+        print(f'Decryption failed, possible mistype in {ansi_escape_red("password")}')
+        input('Press enter to return ')
+        return
+    potential_decap_output = ''
+    if len(capture_location) >= 4:
+        potential_decap_output = capture_location[:-3]
+        potential_decap_output += 'dec.cap'
+    print(f'\nif airdecap was successful the decrypted output must be on {ansi_escape_green(potential_decap_output)}')
+    input(f'Input anything to return to network attacks : ')
+
+
 ##############################################3
 
 """

@@ -209,20 +209,27 @@ if __name__ == "__main__":
             "D1) Deauth Target AP",
             "D2) Deauth a specific Device in Target AP",
             "D3) Deauth all devices in selected OUI (w/ interval or roundrobin) ",
-            "D4) Deauth all Devices in Target AP (w/ interval or roundrobin\n"
+            "D4) Deauth all Devices in Target AP (w/ interval or roundrobin)\n",
             # f"D5) Deauth all APs (w/ interval or roundrobin) {ansi_escape_red('!!!USE WITH CAUTION')}\n",
 
-            f"C0) Capture Packets on Target AP (Captures are stored in /tmp/TargetAP-Captures/) ",
-            f"C1) Capture Handshake of Target AP (Captures are stored in /tmp/TargetAP-handshakeCapture/)  ",
-            f"C2) Bruteforce attack on Target AP with Capture File",
-            f"C3) Graph the Network using Capture File {ansi_escape_red('Requires airgraph-ng')}\n",
+            f"C1) Capture Packets on Target AP (Captures are stored in /tmp/TargetAP-Captures/) ",
+            f"C2) Capture Handshake of Target AP (Captures are stored in /tmp/TargetAP-handshakeCapture/)  ",
+            f"C3) Bruteforce attack on Target AP with Capture File",
+            f"C4) Decrypt Capture Packet of Target AP (WPA/WPA2)",
+            # f"C5) Decrypt Capture Packet of Target AP (WEP)",
 
+                
             f"====== Wireless-Attacks With {ansi_escape_green('besside-ng')} ======\n",
 
             f"B1) Deauth and Capture Handshake of all Networks in range {ansi_escape_red('!!!USE WITH CAUTION')} "
             f"B2) Deauth and Capture Handshake of Target AP\n"
+            
+            f"Wireless Graphing with {ansi_escape_green('airgraph-ng')}\n",
+            f"G1) Graph the Network using Capture File {ansi_escape_red('Requires airgraph-ng')}\n",
+
             # f"B3) Crack WEP key of an open network"
 
+        
     
             f"Current Interface     :   {ansi_escape_green(selected_interface)}",
             f"Current Target AP     :   {ansi_escape_green(TargetAP)}",
@@ -313,15 +320,16 @@ if __name__ == "__main__":
                     Deauth_By_OUI(selected_interface, TargetRouterOUI)
 
             ##############################################################################################
-            case 'C0':
+            case 'C1':
                 if Section[0] == "Wireless" and TargetAP == "":
                     print('Select a target AP to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
                         TargetAP = scan_for_networks(selected_interface)
                 elif Section[0] == "Wireless":
                     Network.capture_packets(selected_interface, TargetAP)
+
             ##############################################################################################
-            case 'C1':
+            case 'C2':
                 if Section[0] == "Wireless" and TargetAP == "":
                     print('Select a target AP to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
@@ -329,7 +337,7 @@ if __name__ == "__main__":
                 elif Section[0] == "Wireless":
                     Network.capture_handshake(selected_interface, TargetAP)
             ##############################################################################################
-            case 'C2':
+            case 'C3':
                 if Section[0] == "Wireless" and TargetAP == "":
                     print('Select a target AP and capture its handshake to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
@@ -337,13 +345,13 @@ if __name__ == "__main__":
                 elif Section[0] == "Wireless":
                     Network.bruteforce_handshake_capture(selected_interface, TargetAP)
             ##############################################################################################
-            case 'C3':
+            case 'C4':
                 if Section[0] == "Wireless" and TargetAP == "":
                     print('Select a target AP and to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
                         TargetAP = scan_for_networks(selected_interface)
                 elif Section[0] == "Wireless":
-                    Network.graph_networks(TargetAP)
+                    Network.airdecap_wpa(TargetAP)
             ##############################################################################################
             case'B1':
                 if Section[0] == "Wireless":
@@ -356,6 +364,14 @@ if __name__ == "__main__":
                         TargetAP = scan_for_networks(selected_interface)
                 elif Section[0] == "Wireless":
                     Network.besside_target_ap(selected_interface,TargetAP)
+            ##############################################################################################
+            case 'G1':
+                if Section[0] == "Wireless" and TargetAP == "":
+                    print('Select a target AP and to continue with this attack')
+                    if input('Select a target Y/N').lower() == 'y':
+                        TargetAP = scan_for_networks(selected_interface)
+                elif Section[0] == "Wireless":
+                    Network.graph_networks(TargetAP)
             ##############################################################################################
             case 'N' | 'n':
                 if selected_interface == "":

@@ -18,12 +18,15 @@ An aircrack-ng utility
 
 - Packet Capture `(airodump-ng)`
 - Handshake Capture (WPA2/PSK) `(aireplay-ng + airodump-ng)`
-- Brute Force attack on capture file (WPA2/PSK) `(aircrack-ng`
-- Network graph `(airgraph-ng)`
+- Brute Force attack on capture file (WPA2/PSK) `(aircrack-ng)`
+- Decrypt Capture Packet of Target AP (WPA/WPA2) `(airdecap-ng)`
 
 
 - handshake Capture on all Networks (`besside-ng`) 
 - handshake Capture on target Network (`besside-ng`) 
+
+- Network graph `(airgraph-ng)`
+
 
 
 ### requirements
