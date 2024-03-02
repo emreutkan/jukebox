@@ -3,4 +3,4 @@ import Network
 import main
 
 if __name__ == "__main__":
-    Network.graph_networks('')
+    Network.deauth_devices_in_targetAP('wlan0','SUPERONLINE')

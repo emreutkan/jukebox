@@ -187,29 +187,14 @@ def scan_for_networks(interface):
         input(f'input anything to return to previous function \n')
 
 
-def get_BSSID_and_Station_from_AP(interface, targetAP):
-    """
-    Runs airodump and saves the output to a variable called output.
-
-    :param interface: is selected by user in main.py and used in airodump
-
-    :param targetAP: is used through the output of airodump to match the BSSID and STATION
-    :type targetAP: String
-
-    :return:  BSSID and STATION
-    :rtype: String
-
-    CALLS: itself,
-
-    CALLED BY: itself,
-
-    """
-
+# ! REPLACED BY get_bssid_channel_from_ssid() and it made everything faster :)
+def get_BSSID_and_Station_from_AP(interface, target_ap):
     def recursion():
         selection = input('Rerun the Scan  Y/N ').lower()
         while selection != 'y' or selection != 'n':
             if selection == 'y':
-                return get_BSSID_and_Station_from_AP(interface, targetAP) # there has to be a return here because get_BSSID_andStation_from_AP returns values
+                return get_BSSID_and_Station_from_AP(interface,
+                                                     target_ap)  # there has to be a return here because get_BSSID_andStation_from_AP returns values
                 # without this return it would return null even if it finds the information
             elif selection == 'n':
                 print(
@@ -220,67 +205,59 @@ def get_BSSID_and_Station_from_AP(interface, targetAP):
             else:
                 recursion()
 
-    # save the output and error from airodump to variables
     clear()
     print('Airodump is running. Wait a while for it to complete')
-    airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
-                                preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    airodump = subprocess.Popen(f'airodump-ng -N {target_ap} {interface}', shell=True, preexec_fn=os.setsid,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     # kill airodump after 10 seconds
-    time.sleep(15)
+    time.sleep(3)
     clear()
     os.killpg(airodump.pid, signal.SIGTERM)
     airodump.wait()
-
-    # .communicate() waits for the process to be completed. so it won't run until 'os.killpg(airodump.pid, signal.SIGKILL)' is successful.
     output, error = airodump.communicate()
-
-    if isinstance(output, bytes):
-        # there was an issue with the output and error, when ---> output = output.decode(encoding='utf-8') it gives ---> UnicodeDecodeError, invalid continuation byte
-        # the solution is changing the encoding from 'utf-8' to 'latin-1'
+    if output:
         output = output.decode(encoding='latin-1')
+        # output = output_ansi_management(output) # i did not want to deal with the ansi codes this time so i will be dealing with duplicates instead
+        if target_ap not in output:
+            print(f'Scan was successful but {ansi_escape_green(target_ap)} is not found with ariodump. check if its still live')
+            recursion()
+        for column in output.split('\n'):
+            row = column.split()
+            """ now we are dealing with data like this
+
+            this is the duplicate data in the output file. actual output variable has much more duplicates then just 3 mentioned here
+
+            see the  output_ansi_management(output) functions documentation to see why that happens
+
+            ['\x1b[0K\x1b[1B\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m', 'CH', '5', '][', 'Elapsed:', '0', 's', '][', '2024-03-02', '11:06', '\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', 'PWR', 'Beacons', '#Data,', '#/s', 'CH', 'MB', 'ENC', 'CIPHER', 'AUTH', 'ESSID\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', '-31', '4', '0', '0', '3', '360', 'WPA3', 'CCMP', 'SAE', 'ESSID', '\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', 'STATION', 'PWR', 'Rate', 'Lost', 'Frames', 'Notes', 'Probes\x1b[0K']
+            ['\x1b[0K\x1b[1B\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m', 'CH', '5', '][', 'Elapsed:', '0', 's', '][', '2024-03-02', '11:06', '\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', 'PWR', 'Beacons', '#Data,', '#/s', 'CH', 'MB', 'ENC', 'CIPHER', 'AUTH', 'ESSID\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', '-31', '4', '0', '0', '3', '360', 'WPA3', 'CCMP', 'SAE', 'ESSID', '\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', 'STATION', 'PWR', 'Rate', 'Lost', 'Frames', 'Notes', 'Probes\x1b[0K'] 
+            ['\x1b[0K\x1b[1B\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m', 'CH', '5', '][', 'Elapsed:', '0', 's', '][', '2024-03-02', '11:06', '\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', 'PWR', 'Beacons', '#Data,', '#/s', 'CH', 'MB', 'ENC', 'CIPHER', 'AUTH', 'ESSID\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', '-31', '4', '0', '0', '3', '360', 'WPA3', 'CCMP', 'SAE', 'ESSID', '\x1b[0K']
+            ['\x1b[0K\x1b[1B', 'BSSID', 'STATION', 'PWR', 'Rate', 'Lost', 'Frames', 'Notes', 'Probes\x1b[0K']
+
+            even though we have duplicates 
+            i can just say that `find where row[-2] == targetAP` return row[1],row[6] if len(row[1]) == 17` 
+
+            """
+            # print(f'essid {row[-1]}')
+            # print(row[-2])
+            # print(row[6])
+            # print(row)
+
+
+            if row[-2] == target_ap and len(row[1]) == 17:
+                return row[1], row[6]
+
     else:
-        print('there was a issue running Airodump, check interface. if everything is okay rerun')
+        print(f'there was a issue running {ansi_escape_red("airodump-ng")}, check interface. if everything is okay rerun')
         recursion()
-
-    print(output)
-    print('==================================================================================================\n')
-
-    # check if airodump found the target AP or not
-    if targetAP not in output:
-        # IF AN ERROR CAUSED TARGET AP TO BE NOT FOUND IN THE AIRODUMP DATA THEN THIS WILL RUN (example: interface not found)
-        if isinstance(error, bytes):
-            error = error.decode(encoding='latin-1')
-            if error:
-                print(
-                    f' There was an error with the airodump-ng. If you see networks listed above then there is no serious issue. Otherwise check the interface and the error')
-                print(
-                    f' Generally If you are seeing this then its a issue with the interface either its disconnected or you given a wrong name for the interface \n')
-                # TODO do not allow selecting interfaces that are not on the output of ip link show
-                print(f'ERROR: {ansi_escape_red(error)}')
-
-        # IF NO ERRORS OCCURRED AND NETWORK SCAN WAS SUCCESSFUL BUT TARGET AP WAS NOT ON THE SCANNED NETWORK LIST THEN THIS WILL RUN
-        print('==================================================================================================\n')
-        print(f'{ansi_escape_green(targetAP)} was not found in scanned networks \n')
-        print('But If you are seeing the networks then check connectivity of AP \n')
-        return recursion()
-    # if airodump was successful in finding the targetAP
-    else:
-
-        # with split.('\n') make the output format in to lines/rows
-        # this for loop will check each line going down
-        for row in output.split('\n'):
-            column = row.split()
-            # the use of row.split() places comma ',' instead of all empty space
-            # the column looks like this for nearly all APs when using airodump
-            # ['BSSID', 'PWR', 'BEACONS', 'DATA', '/s', 'CHANNEL', '360', 'ENCRYPTION', 'CIPHER', 'AUTH', 'ESSID', '\x1b[0K']
-            # but airodump records contain other things as well, so first we need to be sure it matches this pattern
-            if len(column) >= 12 and (targetAP == column[10]) and ((column[0] and column[5]) != ''):
-                targetAP_BSSID = column[0]
-                targetAP_channel = column[5]
-                print(
-                    f' Target BSSID {ansi_escape_green(targetAP_BSSID)} \n CHANNEL {ansi_escape_green(targetAP_channel)}  \n AP {ansi_escape_green(targetAP)} \n \n Listing '
-                    f'Devices in this AP Please Wait')
-                return targetAP_BSSID, targetAP_channel
 
 def Deauth(interface, targetAP, interval=0, timeLimit=0):
     """
@@ -1072,3 +1049,189 @@ def graph_networks(target_ap):
     airgraph.wait()
     input(f'output saved in {graph_output_location} press enter to continue')
     return
+
+def besside(interface):
+    print(f'What you are about to run is a Package called {ansi_escape_green("besside-ng")} that is a part of {ansi_escape_green("Aircrack-ng")}\n')
+    ''
+    print(f'{ansi_escape_green("besside-ng")}  is a tool which will crack all the WEP networks in range and log all '
+          f'the WPA handshakes.  WPA handshakes can be uploaded to the online cracking service at wpa.darkircop.org.  '
+          f'Wpa.darkircop.com also provides useful statistics based on user-submitted capture files about the '
+          f'feasibility of WPA cracking. {ansi_escape_green("this description is from $man besside-ng")}\n')
+
+    print(f'This tool is intended strictly for security research and testing purposes within environments where the '
+          f'user has explicit authorization to conduct such activities. Misuse of this tool against networks without '
+          f'such authorization is illegal and unethical \n')
+
+    consent = input('Do you still want to continue and approve that you have authorization to use this tool (yes/no): ').lower()
+
+    # Check the user's input and either proceed or exit based on their response.
+    if consent == 'yes':
+        clear()
+        timer = 5
+        while timer > 0:
+            print(f"Attack starts in {timer}")
+            time.sleep(1)
+            timer -= 1
+        for terminal in terminals:
+            besside = subprocess.Popen(f'{terminal} -e besside-ng {interface}',shell=True)
+            besside.wait()
+            return
+
+
+##################################### FOR besside + experimental functions #######################################
+
+
+
+
+
+def besside(interface):
+    print(f'What you are about to run is a Package called {ansi_escape_green("besside-ng")} that is a part of {ansi_escape_green("Aircrack-ng")}\n')
+    ''
+    print(f'{ansi_escape_green("besside-ng")}  is a tool which will crack all the WEP networks in range and log all '
+          f'the WPA handshakes.  WPA handshakes can be uploaded to the online cracking service at wpa.darkircop.org.  '
+          f'Wpa.darkircop.com also provides useful statistics based on user-submitted capture files about the '
+          f'feasibility of WPA cracking. {ansi_escape_green("this description is from $man besside-ng")}\n')
+
+    print(f'This tool is intended strictly for security research and testing purposes within environments where the '
+          f'user has explicit authorization to conduct such activities. Misuse of this tool against networks without '
+          f'such authorization is illegal and unethical \n')
+
+    consent = input('Do you still want to continue and approve that you have authorization to use this tool (yes/no): ').lower()
+
+    # Check the user's input and either proceed or exit based on their response.
+    if consent == 'yes':
+        clear()
+        timer = 5
+        while timer > 0:
+            print(f"Attack starts in {timer}")
+            time.sleep(1)
+            timer -= 1
+        for terminal in terminals:
+            besside = subprocess.Popen(f'{terminal} -e besside-ng {interface}',shell=True)
+            besside.wait()
+            return
+    return
+
+def besside_target_ap(interface,target_ap):
+    bssid,channel = get_BSSID_and_Station_from_AP(interface,target_ap)
+    print(bssid)
+    if bssid:
+        clear()
+        for terminal in terminals:
+            besside = subprocess.Popen(f'{terminal} -e besside-ng -b {bssid} {interface}', shell=True)
+            besside.wait()
+            return
+        return
+    else:
+        print("SSID not found")
+
+
+
+##############################################3
+
+"""
+
+this section is for functions that are perfectly fine but were replaced for better ones
+if new ones cause issues in the future swap them with their older versions for tests 
+
+"""
+
+
+
+'''
+def get_BSSID_and_Station_from_AP(interface, targetAP): # RUNS FOR 15 SECONDS
+    """
+    Runs airodump and saves the output to a variable called output.
+
+    :param interface: is selected by user in main.py and used in airodump
+
+    :param targetAP: is used through the output of airodump to match the BSSID and STATION
+    :type targetAP: String
+
+    :return:  BSSID and STATION
+    :rtype: String
+
+    CALLS: itself,
+
+    CALLED BY: itself,
+
+    """
+
+    def recursion():
+        selection = input('Rerun the Scan  Y/N ').lower()
+        while selection != 'y' or selection != 'n':
+            if selection == 'y':
+                return get_BSSID_and_Station_from_AP(interface, targetAP) # there has to be a return here because get_BSSID_andStation_from_AP returns values
+                # without this return it would return null even if it finds the information
+            elif selection == 'n':
+                print(
+                    '==================================================================================================\n')
+                print(
+                    f'this message is from {ansi_escape_green("get_BSSID_and_Station_from_AP")} No {ansi_escape_red("BSSID")} and {ansi_escape_red("CHANNEL")} will be returned this may cause issues if this function was called from another function \n')
+                return
+            else:
+                recursion()
+
+    # save the output and error from airodump to variables
+    clear()
+    print('Airodump is running. Wait a while for it to complete')
+    airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
+                                preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # kill airodump after 10 seconds
+    time.sleep(15)
+    clear()
+    os.killpg(airodump.pid, signal.SIGTERM)
+    airodump.wait()
+
+    # .communicate() waits for the process to be completed. so it won't run until 'os.killpg(airodump.pid, signal.SIGKILL)' is successful.
+    output, error = airodump.communicate()
+
+    if isinstance(output, bytes):
+        # there was an issue with the output and error, when ---> output = output.decode(encoding='utf-8') it gives ---> UnicodeDecodeError, invalid continuation byte
+        # the solution is changing the encoding from 'utf-8' to 'latin-1'
+        output = output.decode(encoding='latin-1')
+    else:
+        print('there was a issue running Airodump, check interface. if everything is okay rerun')
+        recursion()
+
+    print(output)
+    print('==================================================================================================\n')
+
+    # check if airodump found the target AP or not
+    if targetAP not in output:
+        # IF AN ERROR CAUSED TARGET AP TO BE NOT FOUND IN THE AIRODUMP DATA THEN THIS WILL RUN (example: interface not found)
+        if isinstance(error, bytes):
+            error = error.decode(encoding='latin-1')
+            if error:
+                print(
+                    f' There was an error with the airodump-ng. If you see networks listed above then there is no serious issue. Otherwise check the interface and the error')
+                print(
+                    f' Generally If you are seeing this then its a issue with the interface either its disconnected or you given a wrong name for the interface \n')
+                # TODO do not allow selecting interfaces that are not on the output of ip link show
+                print(f'ERROR: {ansi_escape_red(error)}')
+
+        # IF NO ERRORS OCCURRED AND NETWORK SCAN WAS SUCCESSFUL BUT TARGET AP WAS NOT ON THE SCANNED NETWORK LIST THEN THIS WILL RUN
+        print('==================================================================================================\n')
+        print(f'{ansi_escape_green(targetAP)} was not found in scanned networks \n')
+        print('But If you are seeing the networks then check connectivity of AP \n')
+        return recursion()
+    # if airodump was successful in finding the targetAP
+    else:
+
+        # with split.('\n') make the output format in to lines/rows
+        # this for loop will check each line going down
+        for row in output.split('\n'):
+            column = row.split()
+            # the use of row.split() places comma ',' instead of all empty space
+            # the column looks like this for nearly all APs when using airodump
+            # ['BSSID', 'PWR', 'BEACONS', 'DATA', '/s', 'CHANNEL', '360', 'ENCRYPTION', 'CIPHER', 'AUTH', 'ESSID', '\x1b[0K']
+            # but airodump records contain other things as well, so first we need to be sure it matches this pattern
+            if len(column) >= 12 and (targetAP == column[10]) and ((column[0] and column[5]) != ''):
+                targetAP_BSSID = column[0]
+                targetAP_channel = column[5]
+                print(
+                    f' Target BSSID {ansi_escape_green(targetAP_BSSID)} \n CHANNEL {ansi_escape_green(targetAP_channel)}  \n AP {ansi_escape_green(targetAP)} \n \n Listing '
+                    f'Devices in this AP Please Wait')
+                return targetAP_BSSID, targetAP_channel
+
+'''
