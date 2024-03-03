@@ -187,11 +187,10 @@ def scan_for_networks(interface):
         input(f'input anything to return to previous function \n')
 
 
-# ! REPLACED BY get_bssid_channel_from_ssid() and it made everything faster :)
 def get_BSSID_and_Station_from_AP(interface, target_ap):
-    def recursion():
-        selection = input('Rerun the Scan  Y/N ').lower()
-        while selection != 'y' or selection != 'n':
+    def recursion(): # changed the loop where it would loop in to infinity if input was other than y/n
+        while 1:
+            selection = input('Rerun the Scan  Y/N ').lower()
             if selection == 'y':
                 return get_BSSID_and_Station_from_AP(interface,
                                                      target_ap)  # there has to be a return here because get_BSSID_andStation_from_AP returns values
@@ -202,8 +201,8 @@ def get_BSSID_and_Station_from_AP(interface, target_ap):
                 print(
                     f'this message is from {ansi_escape_green("get_BSSID_and_Station_from_AP")} No {ansi_escape_red("BSSID")} and {ansi_escape_red("CHANNEL")} will be returned this may cause issues if this function was called from another function \n')
                 return
-            else:
-                recursion()
+            return
+
 
     clear()
     print('Airodump is running. Wait a while for it to complete')
@@ -218,9 +217,14 @@ def get_BSSID_and_Station_from_AP(interface, target_ap):
     if output:
         output = output.decode(encoding='latin-1')
         # output = output_ansi_management(output) # i did not want to deal with the ansi codes this time so i will be dealing with duplicates instead
+        if 'Failed initializing wireless card(s): wlan0' in output:
+            print(f'Scan was not succesful due to {ansi_escape_green(interface)} being {ansi_escape_red("DOWN")}')
+            print(f'{ansi_escape_red("AIRODUMP-NG STDOUT ::")}\n {ansi_escape_red(str(output))}')
+            recursion()
         if target_ap not in output:
             print(
                 f'Scan was successful but {ansi_escape_green(target_ap)} is not found with ariodump. check if its still live')
+            print(output)
             recursion()
         for column in output.split('\n'):
             row = column.split()
@@ -439,20 +443,17 @@ def deauth_selected_device(interface, target_device, targetAP):
 
 def get_airodump_output(interface):
     def recursion():
-        selection = input('Rerun the Scan  Y/N ').lower()
-        while selection != 'y' or selection != 'n':
+        while 1:
+            selection = input('Rerun the Scan  Y/N ').lower()
             if selection == 'y':
-                get_airodump_output(interface)
+                return get_airodump_output(interface)
             elif selection == 'n':
                 print(
                     '==================================================================================================\n')
                 print(
                     f'this message is from {ansi_escape_green("get_airodump_output")} No {ansi_escape_red("Output")} will be returned this may cause issues if this function was called from another function \n')
                 return
-            else:
-                recursion()
-            return
-
+        return
     clear()
     print('Airodump is running. Wait a while for it to complete')
     airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
@@ -487,18 +488,16 @@ def get_airodump_output_OUI_formatted(interface):
     """
 
     def recursion():
-        selection = input('Rerun the Scan  Y/N ').lower()
-        while selection != 'y' or selection != 'n':
+        while 1:
+            selection = input('Rerun the Scan  Y/N ').lower()
             if selection == 'y':
-                get_airodump_output_OUI_formatted(interface)
+                return get_airodump_output_OUI_formatted(interface)
             elif selection == 'n':
                 print(
                     '==================================================================================================\n')
                 print(
                     f'this message is from {ansi_escape_green("get_airodump_output_OUI_formatted")} No {ansi_escape_red("OUI_output")} will be returned this may cause issues if this function was called from another function \n')
                 return
-            else:
-                recursion()
             return
 
     clear()

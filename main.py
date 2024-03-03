@@ -71,13 +71,14 @@ def switch_selected_interface_to_monitor_mode():
     clear()
 
 
-def selected_interface_managed_mode():
+def switch_selected_interface_to_managed_mode():
     global selected_interface
     clear()
     print('Setting ' + selected_interface + ' to managed mode ')
     subprocess.run('ifconfig {} down '.format(selected_interface), shell=True)
     subprocess.run('iwconfig {} mode managed '.format(selected_interface), shell=True)
     subprocess.run('ifconfig {} up '.format(selected_interface), shell=True)
+    # subprocess.run()
     clear()
 
 
@@ -279,7 +280,7 @@ if __name__ == "__main__":
                     print("Cannot continue without selecting a interface")
                     print(selected_interface)
                 elif Section[0] == "Interface":
-                    selected_interface_managed_mode()
+                    switch_selected_interface_to_managed_mode()
                 elif Section[0] == 'Wireless' and check_if_selected_interface_in_monitor_mode(selected_interface):
                     TargetDevice = scan_devices_in_AP_Select_Device(selected_interface, TargetAP)
             ##############################################################################################
