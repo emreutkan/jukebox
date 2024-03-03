@@ -1,6 +1,8 @@
 
 import Network
-import main
+import AdvancedNetwork
 
 if __name__ == "__main__":
-    Network.airdecap_wpa('SUPERONLINE')
+    print('start')
+
+    print('end')

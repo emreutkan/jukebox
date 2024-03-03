@@ -1154,6 +1154,14 @@ def besside_target_ap(interface, target_ap):
 
 
 def airdecap_wpa(target_ap):
+    """
+    https://www.aircrack-ng.org/doku.php?id=airdecap-ng
+
+    airdecap can also decrypt WEP, I may add that feature for some other time
+
+    :param target_ap:
+    :return:
+    """
     while 1:
         print(f'Here is the list of all cap files that start with {ansi_escape_green(target_ap)} in /tmp\n')
         find_files_with_locate = subprocess.run(
