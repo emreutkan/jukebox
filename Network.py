@@ -188,7 +188,7 @@ def scan_for_networks(interface):
 
 
 def get_BSSID_and_Station_from_AP(interface, target_ap):
-    def recursion(): # changed the loop where it would loop in to infinity if input was other than y/n
+    def recursion():
         while 1:
             selection = input('Rerun the Scan  Y/N ').lower()
             if selection == 'y':
@@ -219,7 +219,7 @@ def get_BSSID_and_Station_from_AP(interface, target_ap):
         # output = output_ansi_management(output) # i did not want to deal with the ansi codes this time so i will be dealing with duplicates instead
         if 'Failed initializing wireless card(s): wlan0' in output:
             print(f'Scan was not succesful due to {ansi_escape_green(interface)} being {ansi_escape_red("DOWN")}')
-            print(f'{ansi_escape_red("AIRODUMP-NG STDOUT ::")}\n {ansi_escape_red(str(output))}')
+            print(f'{ansi_escape_red("AIRODUMP-NG STDOUT ::")}\n{ansi_escape_red(str(output))}')
             recursion()
         if target_ap not in output:
             print(
@@ -453,7 +453,7 @@ def get_airodump_output(interface):
                 print(
                     f'this message is from {ansi_escape_green("get_airodump_output")} No {ansi_escape_red("Output")} will be returned this may cause issues if this function was called from another function \n')
                 return
-        return
+
     clear()
     print('Airodump is running. Wait a while for it to complete')
     airodump = subprocess.Popen('airodump-ng {}'.format(interface), shell=True,
