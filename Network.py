@@ -255,9 +255,9 @@ def get_BSSID_and_Station_from_AP(interface, target_ap):
             # print(row[-2])
             # print(row[6])
             # print(row)
-
-            if row[-2] == target_ap and len(row[1]) == 17:
-                return row[1], row[6]
+            if row[-2] and row[1]:
+                if row[-2] == target_ap and len(row[1]) == 17:
+                    return row[1], row[6]
 
     else:
         print(

