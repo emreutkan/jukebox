@@ -27,12 +27,24 @@ An aircrack-ng utility
 
 - Network graph `(airgraph-ng)`
 
+- Rogue Network [hostapd](https://wiki.gentoo.org/wiki/Hostapd) ,[bridge-utils](https://archlinux.org/packages/extra/x86_64/bridge-utils/)
 
 
 ### requirements
 
-- aircrack-ng
-- airgraph-ng (optional)
+- [aircrack-ng](https://www.aircrack-ng.org)
+- [airgraph-ng](https://www.aircrack-ng.org/doku.php?id=airgraph-ng)
+- [hostapd](https://wiki.gentoo.org/wiki/Hostapd)
+- [bridge-utils](https://archlinux.org/packages/extra/x86_64/bridge-utils/)
+- [dnsmasq](https://wiki.gentoo.org/wiki/Dnsmasq)
+
+### helpful documentation
+
+- [Network bridge management](https://wiki.archlinux.org/title/network_bridge)
+
+## Working on 
+- MITM
+- Rogue ap with wpa, (not related to mitm)
 
 ## Future plans
 - Dos attack on all Networks (interval/indefinite) 
@@ -40,10 +52,9 @@ An aircrack-ng utility
 - Crack Wep key of an open network `(wesside-ng)`
 - wpaclean, airolib-ng, airdeclock-ng
 - airbase-ng
-
-
-
-## Future plans for other projects
-- MITM attacks
-- Rogue Network
 - Port scan
+
+
+
+
+
