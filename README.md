@@ -2,6 +2,8 @@
 
 An aircrack-ng utility
 
+## [Installation / Usage](https://github.com/emreutkan/jukebox/wiki/Installation---Usage)
+
 ## Features
 - Interface selection, mode changer (monitor, managed) `(iwconfig + ifconfig)`
 - Interface mac spoof `(ip link)`
