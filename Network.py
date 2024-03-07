@@ -251,7 +251,6 @@ def get_bssid_and_station_from_ap(interface, target_ap):
             print(
                 f'Scan was successful but {ansi_escape_green(target_ap)} is not found with airodump. '
                 f'check if its still live')
-            print(repr(output))
             recursion()
         for column in output.split('\n'):
             row = column.split()
