@@ -148,21 +148,6 @@ def get_all_ssid_from_output(output):
 
 
 def scan_for_networks(interface):
-    """
-    inputs a string and returns it with the color green
-
-    use when in need for better visibility during print commands
-
-    :param interface: user selected interface from the main.py
-
-    CALLS: 0
-
-    CALLED BY: main.py
-
-    Depends on (uses) :
-        - get_airodump_output(interface)
-
-    """
     output = get_airodump_output(interface)
     SSIDS = get_all_ssid_from_output(output)
     for ssid in SSIDS:
