@@ -244,7 +244,7 @@ def scan_for_networks():
         ssid_counter = 0
         for row in output.split('\n'):
             column = row.split()
-            if len(column) >= 12 and str(column[0]) != '' and not str(column[10]) == 'AUTH' and not str(column[10]) == 'PSK' and not str(
+            if len(column) >= 12 and str(column[0]) != '' and str(column[5]) != '' and str(column[-3]) != ''   and not str(column[10]) == 'AUTH' and not str(column[10]) == 'PSK' and not str(
                     column[10]) == '][' and not str(
                     column[10]).startswith('<length:') and not str(column[10]).startswith('0>:') and not str(column[10]).startswith('0>') and not str(column[10]).startswith('SAE') and not str(column[10]).startswith('(not associated)'):
                 if column[10] not in [ssid[1] for ssid in found_SSIDS]:
@@ -619,7 +619,7 @@ def capture_handshake():
     clear()
 
     def recursion():
-        selection = input('\n Do you want to try again Y/N : ').lower()
+        selection = input('\nDo you want to try again Y/N : ').lower()
         while 1:
             if selection == 'y':
                 capture_handshake()
@@ -633,7 +633,6 @@ def capture_handshake():
             select_target_ap()
         return
     if target_ap_authentication == 'PSK':
-        input(target_ap_authentication)
         clear()
         print(f'Running packet capture on {green(target_ap)}')
         print(
@@ -652,8 +651,13 @@ def capture_handshake():
         airodump = popen_command_new_terminal(
             f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_handshake_capture_location} {selected_interface}')
 
-        time.sleep(30)
-
+        timeout = 30
+        while timeout != 0:
+            print(f"Remaining time {green(timeout)} Press Q to cancel")
+            if check_for_q_press(timeout=1):
+                print("Loop canceled by user.")
+                break
+            timeout -= 1
         os.killpg(airodump.pid, signal.SIGTERM)
 
         airodump_output = ''
