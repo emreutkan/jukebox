@@ -4,17 +4,21 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 REPO_URL="https://github.com/emreutkan/jukebox.git"
-INSTALL_DIR="$HOME"
+INSTALL_DIR="$HOME/jukebox"
 
 if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}Please run as root (sudo ./installer.sh)${NC}"
     exit
 fi
 
-cd $INSTALL_DIR
-echo -e "${GREEN}Cloning the jukebox repository to the root directory.${NC}"
-git clone "$REPO_URL"
-cd jukebox || exit
+if [ ! -d "$INSTALL_DIR" ]; then
+    echo -e "${GREEN}Creating installation directory at $INSTALL_DIR${NC}"
+    mkdir -p "$INSTALL_DIR"
+fi
+
+cd "$INSTALL_DIR" || exit
+echo -e "${GREEN}Cloning the jukebox repository to the installation directory.${NC}"
+git clone "$REPO_URL" .
 
 if command -v pacman &> /dev/null; then
     PACKAGE_MANAGER_INSTALL="sudo pacman -S --noconfirm"
@@ -32,7 +36,7 @@ fi
 echo -e "${GREEN}Updating package manager${NC}"
 $PACKAGE_MANAGER_UPDATE
 
-DEPENDENCIES="aircrack-ng airgraph-ng net-tools python3 python3-pip git"
+DEPENDENCIES="aircrack-ng airgraph-ng net-tools python3 python3-pip python3-venv git"
 for dep in $DEPENDENCIES; do
     if ! command -v $dep &> /dev/null; then
         echo -e "${GREEN}Installing $dep${NC}"
@@ -57,9 +61,9 @@ if [ \"\$EUID\" -ne 0 ]; then
     echo 'Please run as root (sudo jukebox)'
     exit
 fi
-cd $INSTALL_DIR/jukebox
+cd $INSTALL_DIR
 source venv/bin/activate
-python jukebox.py" > jukebox
+exec \"$INSTALL_DIR/venv/bin/python\" jukebox.py" > jukebox
 
 chmod +x jukebox
 sudo mv jukebox /usr/local/bin/jukebox
